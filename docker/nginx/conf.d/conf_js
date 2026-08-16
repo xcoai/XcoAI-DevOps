@@ -1,0 +1,3 @@
+js_path             /etc/nginx/conf.d;
+js_import           http.js;
+js_set              $decode_target_url http.decode_target_url;

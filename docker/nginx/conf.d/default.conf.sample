@@ -1,0 +1,57 @@
+server {
+    listen 80;
+    server_name www.xxx.net;
+    rewrite ^ https://$server_name$request_uri? permanent;
+
+    location ~ /.well-known/acme-challenge/ {
+        allow all;
+    }
+}
+server {
+    listen                     443 ssl;
+    server_name                www.xxx.net;
+    ssl_certificate            /etc/nginx/ssl/xxx.net/fullchain.pem;
+    ssl_certificate_key        /etc/nginx/ssl/xxx.net/privkey.pem;
+    ssl_trusted_certificate    /etc/nginx/ssl/xxx.net/chain.pem;
+    include                    /etc/nginx/conf.d/conf_ssl;
+    include                    /etc/nginx/conf.d/conf_xss-sql;
+
+    location /upload/ {
+        if ($request_filename ~* ^.*?.(txt|doc|pdf|rar|gz|zip|docx|exe|xlsx|ppt|pptx)$){
+            add_header Content-Disposition attachment;
+        }
+        set $is_matched 0;
+        if ($request_filename ~* ^.*?.(htm|html)$){
+            set $is_matched 1;
+            expires -1;
+        }
+        if ($is_matched = 0){
+            expires 60d;
+            add_header Cache-Control "public, immutable";
+        }
+        alias /usr/share/nginx/upload/;
+    }
+
+    location ~* /(api|openapi|dataapi|proxy|websocket|socket.io)/ {
+        if ($request_filename ~* ^.*?.(txt|doc|pdf|rar|gz|zip|docx|exe|xlsx|ppt|pptx)$){
+            add_header Content-Disposition attachment;
+        }
+        # websocket
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_pass http://172.17.0.1:8080;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location / {
+        if ($request_filename ~* ^.*?.(txt|doc|pdf|rar|gz|zip|docx|exe|xlsx|ppt|pptx)$){
+            add_header Content-Disposition attachment;
+        }
+        root /usr/share/nginx/site/xcloud;
+    }
+}

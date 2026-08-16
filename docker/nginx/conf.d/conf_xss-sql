@@ -1,0 +1,123 @@
+# =============================================================================
+# 增强型 Nginx 安全防护（防注入、XSS、扫描等）
+# =============================================================================
+# 说明：本配置作为 WAF 辅助层，应用层仍需使用参数化查询。
+# 状态码统一使用 403 Forbidden。
+# =============================================================================
+
+# ============================= 1. SQL 注入检测 ==============================
+
+# 1.1 核心 SQL 关键字（补充 select/from/where/and/or/having/group/order）
+#     使用 \b 边界，且必须后跟分隔符（空白、+、%20、;、)、'、" 等）
+if ($query_string ~* "(\bselect\b|\bunion\b|\binsert\b|\bdrop\b|\btruncate\b|\bupdate\b|\bdelete\b|\bfrom\b|\bwhere\b|\band\b|\bor\b|\bgrant\b|\bexec\b|\bhaving\b|\bgroup\b|\border\b)(\s|\+|\%20|\%0A|\%0D|;|\)|'|\")") {
+    return 403;
+}
+
+# 1.2 联合查询注入（增强，允许中间有注释或空格）
+if ($query_string ~* "(\+|\%20|\s)union(\+|\%20|\s).*(?:\+|\%20|\s)select(\+|\%20|\s)") {
+    return 403;
+}
+
+# 1.3 注释符 + 关键字组合（检测 --, #, ;, ' 等）
+if ($query_string ~* "('|;|--|#)\s*(?:select|union|insert|drop|truncate|update|delete)") {
+    return 403;
+}
+
+# 1.4 内联注释 /**/ 绕过检测（单独检测）
+if ($query_string ~* "/\*.*\*/") {
+    return 403;
+}
+
+# 1.5 延时注入函数（sleep/benchmark，可选）
+if ($query_string ~* "(\bsleep\b|\bbenchmark\b)\s*\(") {
+    return 403;
+}
+
+# 1.6 文件操作（load_file/into outfile）
+if ($query_string ~* "(\bload_file\b|\binto\s+outfile\b)") {
+    return 403;
+}
+
+# ============================= 2. 特殊字符与编码绕过 =========================
+
+# 2.1 空字节截断
+if ($query_string ~* "%00") {
+    return 403;
+}
+
+# 2.2 base64 编码（启用，若产生误拦可调整为更精确）
+if ($query_string ~* "base64_(en|de)code\s*\(") {
+    return 403;
+}
+
+# 2.3 目录遍历（增强：支持单重和双重编码）
+if ($request_uri ~* "(?:\.\./|\.\.%2[fF]|%2[eE]%2[eE]/|%252e%252e%252f|%252e%252e/)") {
+    return 403;
+}
+
+# 2.4 敏感路径 proc/self/environ
+if ($query_string ~* "proc/self/environ") {
+    return 403;
+}
+
+# 2.5 全局变量注册（GLOBALS / _REQUEST）
+if ($query_string ~* "(?:GLOBALS|_REQUEST)\s*\[") {
+    return 403;
+}
+
+# ============================= 3. XSS 防护（增强） ===========================
+
+# 3.1 标签注入（增加了更多标签，并支持编码）
+if ($query_string ~* "(?:<|%3C)\s*(?:script|iframe|style|img|svg|object|embed|video|audio|body|details|a|input|form|textarea|button|select|option|label|map|area)\b[^>]*(?:>|%3E)") {
+    return 403;
+}
+
+# 3.2 事件处理器（扩展事件列表，并允许空格）
+if ($query_string ~* "\bon(?:error|load|click|mouse\w+|focus|blur|submit|input|change|key\w+|toggle|pointer\w+|animation\w+|transition\w+|dblclick|contextmenu|drag\w+|scroll|resize|play|pause)\s*=") {
+    return 403;
+}
+
+# 3.3 javascript: 伪协议
+if ($query_string ~* "javascript\s*:") {
+    return 403;
+}
+
+# 3.4 危险函数调用
+if ($query_string ~* "(?:alert|confirm|prompt|eval|setTimeout|setInterval|Function|document\.write)\s*\(") {
+    return 403;
+}
+
+# 3.5 data: 协议（常用于 XSS，如 data:text/html,<script>...）
+if ($query_string ~* "data\s*:\s*text\s*/\s*html") {
+    return 403;
+}
+
+# ============================= 4. 恶意 User-Agent ============================
+
+# 仅拦截已知扫描器，不误拦正常爬虫或开发工具
+if ($http_user_agent ~* "Havij|sqlmap|Nmap Scripting Engine|masscan|JoomlaScan|WPScan|DirBuster|Nikto|OpenVAS|nessus|acunetix|w3af|burpsuite|ZAP|GrabNet|Indy Library|libwww-perl|WebBench|ApacheBench|JoeDog|GetRight|TurnitinBot|WebFetch|17ce\.com|YisouSpider|Jmeter|mail2000|Go!Zilla|Download Demon") {
+    return 403;
+}
+
+# ============================= 5. 恶意 Referer ===============================
+
+if ($http_referer ~* "17ce\.com|webscan\.org") {
+    return 403;
+}
+
+# ============================= 6. HTTP 方法限制（可选） ======================
+# if ($request_method !~ ^(GET|HEAD|POST)$) { return 405; }
+
+# ============================= 7. 安全头（建议单独配置） ======================
+# add_header X-Frame-Options "SAMEORIGIN" always;
+# add_header X-Content-Type-Options "nosniff" always;
+# add_header X-XSS-Protection "1; mode=block" always;
+# add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+# add_header Content-Security-Policy "default-src 'self'; script-src 'self'" always;
+
+# ============================= 注意事项 ======================================
+# 1. 所有规则均为辅助防护，务必在应用层使用参数化查询。
+# 2. 若业务参数中含有 SQL 关键字（如搜索词包含 "select"），可能被误拦。
+#    建议对特定 location 取消规则（使用 if 取反或设置变量）。
+# 3. 建议开启 error_log，监控拦截日志以微调规则。
+# =============================================================================

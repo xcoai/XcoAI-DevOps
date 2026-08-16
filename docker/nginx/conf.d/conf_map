@@ -1,0 +1,22 @@
+map $request_uri $loggable_uri {
+    ~^.*/websocket/.*$  0;
+    default 1;
+}
+map $status $loggable_status {
+    ~^[23]  0;
+    default $loggable_uri;
+}
+map $http_upgrade $connection_upgrade {
+    ''      close;
+    default upgrade;
+}
+#map $uri $has_query {
+#    default 0;
+#    "~*\?" 1;
+#}
+#map $http_user_agent $client_user_agent {
+#    # 有非空字符 → 保留原值
+#    # ~\S+   $http_user_agent;
+#    # 空或纯空格 → 使用默认值
+#    default "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+#}

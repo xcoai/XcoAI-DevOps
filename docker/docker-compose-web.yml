@@ -1,0 +1,22 @@
+services:
+  x-nginx:
+    image: nginx:latest
+    container_name: x-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/ssl:/etc/nginx/ssl:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/site:/usr/share/nginx/site:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/upload:/usr/share/nginx/upload:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/logs:/var/log/nginx
+    environment:
+      PORT: "80"
+    networks:
+      - net-web
+
+networks:
+  net-web:
+    driver: bridge

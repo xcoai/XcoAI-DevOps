@@ -1,0 +1,13 @@
+add_header          Access-Control-Allow-Origin *;
+add_header          Access-Control-Allow-Methods 'GET,POST,PUT,DELETE,OPTIONS';
+add_header          Access-Control-Allow-Credentials true;
+add_header          Access-Control-Allow-Private-Network true;
+add_header          Content-Security-Policy "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self' chrome-extension: http: https:; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;";
+add_header          X-Frame-Options ALLOWALL;
+add_header          X-Content-Type-Options nosniff;
+add_header          X-XSS-Protection '1; mode=block';
+add_header          X-Robots-Tag 'noindex, noarchive, nosnippet';
+add_header          X-Download-Options noopen;
+add_header          X-Permitted-Cross-Domain-Policies none;
+add_header          Referrer-Policy 'origin-when-cross-origin';
+add_header          Strict-Transport-Security 'max-age=31536000; includeSubDomains; preload';
