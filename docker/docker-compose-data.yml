@@ -1,0 +1,61 @@
+services:
+  x-mysql:
+    container_name: x-mysql
+    image: mysql:8.4.11
+    restart: on-failure
+    ports:
+      - "6306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: xcoai_data
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/my.cnf:/etc/mysql/my.cnf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD"]
+      start_period: 30s
+      interval: 20s
+      timeout: 10s
+      retries: 4
+    networks:
+      - net-data
+
+  x-redis:
+    container_name: x-redis
+    image: redis:8.8.1
+    restart: on-failure
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/data:/data
+    command: redis-server /etc/redis.conf
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli ping|grep -e "PONG\|NOAUTH"']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - net-data
+
+  x-es:
+    container_name: x-es
+    image: elasticsearch:9.5.1
+    restart: on-failure
+    user: root
+    ports:
+      - "6200:9200"
+      - "6201:9300"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/es/data:/bitnami/elasticsearch/data
+    networks:
+      - net-data
+
+networks:
+  net-data:
+    driver: bridge

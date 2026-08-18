@@ -1,7 +1,7 @@
 services:
   x-nginx:
-    image: nginx:latest
     container_name: x-nginx
+    image: nginx:latest
     restart: unless-stopped
     ports:
       - "80:80"

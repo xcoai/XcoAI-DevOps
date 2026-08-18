@@ -1,7 +1,7 @@
 services:
   x-termix:
-    image: ghcr.io/lukegus/termix:latest
     container_name: x-termix
+    image: ghcr.io/lukegus/termix:latest
     restart: unless-stopped
     ports:
       - "9980:8080"
@@ -15,8 +15,8 @@ services:
       - net-termix
 
   x-guacd:
-    image: guacamole/guacd:1.6.0
     container_name: x-guacd
+    image: guacamole/guacd:1.6.0
     restart: unless-stopped
     ports:
       - "9922:4822"
