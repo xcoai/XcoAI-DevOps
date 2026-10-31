@@ -48,7 +48,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 | `docker-compose-termix.yml` | `x-termix`（9980→8080）、`x-guacd`（9922→4822） | `net-termix` |
 | `docker-compose-web.yml` | `x-nginx`（80/443） | `net-web` |
 
-**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关 `http://172.17.0.1:<port>`（docker0 网桥 → 宿主机），业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。
+**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。
 
 ### nginx 配置分层（改配置前必读）
 

@@ -43,7 +43,7 @@ server {
     location ~* ^/(api|openapi)/(login|auth|logout|sms|register|password)(?![a-z0-9]) {
         limit_req zone=req_auth burst=5 nodelay;
 
-        proxy_pass http://172.17.0.1:8080;
+        proxy_pass http://host.docker.internal:8080;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -61,7 +61,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        proxy_pass http://172.17.0.1:8080;
+        proxy_pass http://host.docker.internal:8080;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
