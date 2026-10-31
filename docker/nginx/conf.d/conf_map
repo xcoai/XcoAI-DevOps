@@ -10,6 +10,15 @@ map $http_upgrade $connection_upgrade {
     ''      close;
     default upgrade;
 }
+
+# ---------------- CORS ----------------
+# 默认不放行任何跨域；站点在自己的 server 内用 if + set 覆盖 $cors_origin。
+# nginx 的 map 变量可被 set 覆盖，因此这里只声明默认值，不维护域名清单。
+# 各部署域名不同，写死在共享 map 里会迫使每个用户修改本文件。
+# 同源请求不需要 CORS；需要跨域时，在站点 conf 中按实际域名配置正则。
+map $http_origin $cors_origin {
+    default "";
+}
 #map $uri $has_query {
 #    default 0;
 #    "~*\?" 1;

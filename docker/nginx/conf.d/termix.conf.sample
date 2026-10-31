@@ -19,6 +19,11 @@ server {
     limit_req                  zone=req_site burst=60 nodelay;
     limit_conn                 conn_perip 50;
 
+    # CORS 白名单：默认不放开跨域；按实际前端域名取消注释并修改正则
+    # if ($http_origin ~* "^https://([a-z0-9-]+\.)?your-domain\.com$") {
+    #     set $cors_origin $http_origin;
+    # }
+
     location / {
         limit_req  zone=req_api burst=20 nodelay;
 

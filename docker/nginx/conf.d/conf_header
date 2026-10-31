@@ -1,4 +1,6 @@
-add_header          Access-Control-Allow-Origin *;
+# $cors_origin 默认空；站点在自身 server 内用 if + set 覆盖
+add_header          Vary Origin;
+add_header          Access-Control-Allow-Origin $cors_origin;
 add_header          Access-Control-Allow-Methods 'GET,POST,PUT,DELETE,OPTIONS';
 add_header          Access-Control-Allow-Credentials true;
 add_header          Access-Control-Allow-Private-Network true;

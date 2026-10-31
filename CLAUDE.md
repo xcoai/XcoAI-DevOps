@@ -54,7 +54,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 `nginx.conf` 在 http 上下文**按固定顺序显式 include 片段**，顺序有依赖；最后由 `include /etc/nginx/conf.d/*.conf` 自动加载站点文件：
 
-1. `conf_map` — `$loggable_status`（访问日志过滤 websocket 与 2xx/3xx）、`$connection_upgrade`
+1. `conf_map` — `$loggable_status`（访问日志过滤 websocket 与 2xx/3xx）、`$connection_upgrade`、`$cors_origin`（CORS 默认空值，站点 server 用 `if + set` 覆盖）
 2. `conf_limit` — `limit_req_zone` / `limit_conn_zone` 定义、127.0.0.1 与 172.17.0.0/16 白名单
 3. `waf_exempt` — 免检 URI map，**必须先于** `waf_maps`
 4. `waf_maps` — UA/SQLi/XSS/路径规则 map，汇总出 `$waf_hit`、`$waf_action`，定义 `waf_main` 日志格式
@@ -94,7 +94,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ## 已知风险（发现即可，未经用户确认不要顺手改）
 
 - `docker-compose-data.yml` 中 MySQL root 密码明文写在 `environment` 里，生产应改 env 文件 / secret。
-- `conf_header` 同时输出 `Access-Control-Allow-Origin *` 与 `Access-Control-Allow-Credentials true`；按 CORS 规范浏览器会拒绝带凭证的跨域请求，调整跨域策略时需一并处理。
+- 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - ES 挂载路径与官方镜像不匹配（见上）。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 
