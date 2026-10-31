@@ -1,0 +1,12 @@
+# 免检 URI：命中 WAF 规则但业务上必须放行的路径
+# 只对确实需要接收关键字参数的接口开放，应用层仍须参数化查询
+map $uri $waf_exempt {
+    default 0;
+
+    #~^/api/search   1;
+    #~^/api/query    1;
+    #~^/api/export   1;
+
+    # 按需扩展，例如：
+    #~^/admin/report 1;
+}

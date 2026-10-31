@@ -1,0 +1,34 @@
+# ============================================================
+# 请求限流（http 上下文）
+# 用法：zone 在这里定义，limit_req / limit_conn 在 server 或 location 内启用
+#
+# 三条铁律：
+#   1) limit_req 每个层级只认一个 zone，location 里写了会【替换】
+#      server 级那条，不是叠加。想双层限流做不到，只能按路径分档。
+#   2) 前面若套了 CDN，必须先配 real_ip_header X-Forwarded-For，
+#      否则 $binary_remote_addr 全是 CDN 节点 IP，会全站限死。
+#   3) zone 内存：1m 约存 1.6 万个 IP（$binary_remote_addr 为 key）。
+#
+# 速率换算：30r/s = 1800 次/分，10r/s = 600 次/分，1r/s = 60 次/分
+# ============================================================
+
+# 白名单：命中的来源把 key 置空，即跳过限流
+geo $limit_ip {
+    default        1;
+    127.0.0.1      0;
+    172.17.0.0/16  0;   # docker 网桥 / 宿主机，不会有真实用户从这来
+}
+map $limit_ip $limit_key {
+    0   "";
+    1   $binary_remote_addr;
+}
+
+limit_req_zone $limit_key zone=req_site:10m  rate=30r/s;   # 全站兜底，含静态资源
+limit_req_zone $limit_key zone=req_api:10m   rate=10r/s;   # 业务 API
+limit_req_zone $limit_key zone=req_auth:10m  rate=1r/s;    # 登录 / 短信 / 注册
+
+# 并发连接数：防连接耗尽，与 limit_req（请求速率）是两回事
+limit_conn_zone $binary_remote_addr zone=conn_perip:10m;
+
+limit_req_status     429;    # 默认 503，429 语义更准，前端好区分
+limit_req_log_level  warn;   # 默认 error，被限流时会刷满 error.log

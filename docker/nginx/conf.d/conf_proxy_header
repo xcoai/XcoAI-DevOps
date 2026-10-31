@@ -1,4 +1,4 @@
-client_max_body_size        1024m;
+client_max_body_size        100m;
 client_body_buffer_size     1024k;
 client_header_buffer_size   512k;
 

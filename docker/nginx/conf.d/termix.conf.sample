@@ -14,10 +14,15 @@ server {
     ssl_certificate_key        /etc/nginx/ssl/xcoai.net/privkey.pem;
     ssl_trusted_certificate    /etc/nginx/ssl/xcoai.net/chain.pem;
     include                    /etc/nginx/conf.d/conf_ssl;
-    include                    /etc/nginx/conf.d/conf_xss-sql;
+    include                    /etc/nginx/conf.d/waf_server;
+
+    limit_req                  zone=req_site burst=60 nodelay;
+    limit_conn                 conn_perip 50;
 
     location / {
-        if ($request_filename ~* ^.*?.(txt|doc|pdf|rar|gz|zip|docx|exe|xlsx|ppt|pptx)$){
+        limit_req  zone=req_api burst=20 nodelay;
+
+        if ($request_filename ~* ^.*?.(txt|doc|pdf|rar|gz|zip|docx|exe|xlsx|ppt|pptx)$) {
             add_header Content-Disposition attachment;
         }
         # websocket

@@ -1,0 +1,105 @@
+# ============================================================
+# WAF 规则变量（http 上下文）
+# 依赖：waf-exempt 需先于本文件 include
+#
+# 改规则前先看这三条（都踩过坑）：
+#   1) 正则必须「整段加引号」写成 "~*..."，nginx 只识别词首引号。
+#      写成 ~*"..." 会把引号当成正则字面量，规则永不命中，而 nginx -t 不报错。
+#   2) 空白一律用 (?:[\s+]|%20|%09|%0a|%0d)，只写 \s 会被 + 和 %20 绕过。
+#   3) $query_string 是 nginx 未解码的原始串，十六进制编码（%55NION = UNION）
+#      识别不了，这是纯 nginx 方案的固有限制，只能靠应用层兜底。
+# ============================================================
+
+# ---------------- 恶意 UA ----------------
+map $http_user_agent $waf_ua {
+    default 0;
+    ""      0;
+
+    ~*sqlmap|nikto|nmap|masscan|zgrab|zmap                    1;
+    ~*acunetix|awvs|appscan|netsparker|nessus|openvas|nexpose 1;
+    ~*burp|zap|w3af|wpscan|joomlascan|droopescan              1;
+    ~*dirbuster|gobuster|feroxbuster|wfuzz|ffuf|nuclei|xray   1;
+    ~*havij|pangolin|jsql|sqli                                1;
+
+    # 可选（会误伤压测/监控/搜索引擎），按需注释
+    ~*jmeter|apachebench|webbench|libwww-perl                 1;
+    ~*17ce\.com|yisouspider                                   1;
+}
+
+# ---------------- SQL 注入 ----------------
+map $query_string $waf_sqli {
+    default 0;
+
+    # 注释符/分号后接关键字：' or 1=1-- 、; drop table 、; exec
+    "~*(?:--|#|;)(?:[\s+]|%20|%09|%0a|%0d)*(?:select|union|insert|update|delete|drop|truncate|create|alter|exec|execute)\b" 1;
+    # 逻辑短路堆叠：||select 、&&select
+    "~*(?:\|\||&&)(?:[\s+]|%20|%09|%0a|%0d)*(?:select|insert|update|delete|drop|create|alter|truncate|exec|execute)\b"      1;
+    # UNION 注入：union all select 、union%0aselect 、union/**/select
+    "~*union(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:all(?:[\s+]|%20|%09|%0a|%0d)+)?select"                                   1;
+    # 内联注释绕过：/**/union/**/select 、/*!50000select*/
+    "~*/\*.*?(?:select|union|sleep|benchmark|load_file).*?\*/"                                                              1;
+    # 时间盲注 / 报错注入
+    "~*(?:sleep|benchmark|extractvalue|updatexml|geometrycollection|pg_sleep|dbms_pipe|xp_cmdshell)(?:[\s+]|%20|%09)*\("    1;
+    "~*waitfor(?:[\s+]|%20|%09)+delay"                                                                                      1;
+    # 文件读写
+    "~*load_file(?:[\s+]|%20|%09)*\(|into(?:[\s+]|%20|%09)+(?:out|dump)file"                                                1;
+    # 元数据探测
+    "~*information_schema|performance_schema|mysql\s*\.\s*user|sysobjects|pg_catalog|sqlite_master"                         1;
+    # 永真条件：' or '1'='1 、' or 1=1 、'||'1'='1 、admin'--
+    "~*(?:'|%27)(?:[\s+]|%20|%09)*(?:or|and|xor|\|\||&&)"                                                                   1;
+    "~*(?:'|%27)(?:[\s+]|%20|%09)*(?:--|#)"                                                                                 1;
+    "~*(?:or|and|xor)(?:[\s+]|%20|%09)+\d+(?:[\s+]|%20|%09)*=(?:[\s+]|%20|%09)*\d+"                                         1;
+    # 布尔盲注常用函数（必须加 \b，否则 record( / keyword( 会误伤）
+    "~*\b(?:ascii|substring|substr|mid|char|chr|ord|cast|convert)(?:[\s+]|%20|%09)*\("                                      1;
+
+    # 可选（带 order by 排序参数的接口会误报），默认关闭
+    "~*order(?:[\s+]|%20|%09)+by(?:[\s+]|%20|%09)+\d+"                                                                      1;
+}
+
+# ---------------- XSS ----------------
+map $query_string $waf_xss {
+    default 0;
+
+    ~*(?:<|%3C)\s*(?:script|iframe|object|embed|svg|math|base|link|meta)\b 1;
+    ~*(?:<|%3C)\s*/\s*(?:script|iframe|object|embed)\s*> 1;
+    ~*\bon(?:error|load|click|mouse\w+|focus|blur|submit|input|change|key\w+|pointer\w+|animation\w+|transition\w+|dblclick|contextmenu|drag\w+|scroll|resize|play|pause|toggle)\s*= 1;
+    ~*javascript\s*:|vbscript\s*: 1;
+    ~*data\s*:\s*text/html 1;
+    ~*(?:eval|fromcharcode|document\.cookie|document\.write|settimeout|setinterval)\s*\( 1;
+    # 等号允许 = 或 %3D，否则编码过的 img payload 会绕过
+    ~*(?:<|%3C)\s*img[^>]+on(?:error|load)\s*(?:=|%3D) 1;
+}
+
+# ---------------- 路径/敏感资源 ----------------
+map $request_uri $waf_uri_bad {
+    default 0;
+
+    ~*(?:\.\./|\.\.%2f|%2e%2e/|%2e%2e%2f|%252e%252e%252f|%252e%252e/) 1;
+    ~*/\.(?:git|svn|hg|env|htaccess|htpasswd|ds_store|bash_history|ssh|aws) 1;
+    ~*/(?:wp-admin|wp-login|xmlrpc\.php|phpmyadmin|phpinfo|server-status|actuator|manager/html|adminer) 1;
+    # 这两条单独加边界：pma 会误伤 /api/pmadmin/list，console 会误伤 /foo/console.log
+    # 用 (?![a-z0-9]) 而不是 (?:/|$)，正则里的裸 $ 会被 nginx 当成变量前缀
+    ~*/pma(?![a-z0-9]) 1;
+    # 若自有 /console 业务路径，请删掉下一行；多排除一个 . 是为了放行 /console.log 这类静态文件
+    ~*/console(?![a-z0-9.]) 1;
+    ~*(?:proc/self/environ|/etc/passwd|/etc/shadow) 1;
+    ~*%00 1;
+}
+
+# ---------------- 汇总命中 ----------------
+map "$waf_ua$waf_sqli$waf_xss$waf_uri_bad" $waf_hit {
+    default "";
+    ~1      1;
+}
+
+# ---------------- 最终动作 ----------------
+# 灰度开关：把 "block" 改成 "pass" 即整体切为观察模式
+map "$waf_hit$waf_exempt" $waf_action {
+    default "pass";
+    "10"    "block";   # 命中且未免检
+    "11"    "pass";    # 命中但在免检名单
+}
+
+# ---------------- 日志格式 ----------------
+log_format waf_main '$remote_addr - $request_method $request_uri '
+                    'UA="$http_user_agent" HIT="$waf_hit" EXEMPT="$waf_exempt"';
