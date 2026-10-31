@@ -1,15 +1,16 @@
+# always：4xx/5xx（WAF 403、限流 429 等）也输出这些头，前端才能读到跨域错误
 # $cors_origin 默认空；站点在自身 server 内用 if + set 覆盖
-add_header          Vary Origin;
-add_header          Access-Control-Allow-Origin $cors_origin;
-add_header          Access-Control-Allow-Methods 'GET,POST,PUT,DELETE,OPTIONS';
-add_header          Access-Control-Allow-Credentials true;
-add_header          Access-Control-Allow-Private-Network true;
-add_header          Content-Security-Policy "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self' chrome-extension: http: https:; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;";
-add_header          X-Frame-Options ALLOWALL;
-add_header          X-Content-Type-Options nosniff;
-add_header          X-XSS-Protection '1; mode=block';
-add_header          X-Robots-Tag 'noindex, noarchive, nosnippet';
-add_header          X-Download-Options noopen;
-add_header          X-Permitted-Cross-Domain-Policies none;
-add_header          Referrer-Policy 'origin-when-cross-origin';
-add_header          Strict-Transport-Security 'max-age=31536000; includeSubDomains; preload';
+add_header          Vary Origin always;
+add_header          Access-Control-Allow-Origin $cors_origin always;
+add_header          Access-Control-Allow-Methods 'GET,POST,PUT,DELETE,OPTIONS' always;
+add_header          Access-Control-Allow-Credentials true always;
+add_header          Access-Control-Allow-Private-Network true always;
+add_header          Content-Security-Policy "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self' chrome-extension: http: https:; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;" always;
+add_header          X-Frame-Options ALLOWALL always;
+add_header          X-Content-Type-Options nosniff always;
+add_header          X-XSS-Protection '1; mode=block' always;
+add_header          X-Robots-Tag 'noindex, noarchive, nosnippet' always;
+add_header          X-Download-Options noopen always;
+add_header          X-Permitted-Cross-Domain-Policies none always;
+add_header          Referrer-Policy 'origin-when-cross-origin' always;
+add_header          Strict-Transport-Security 'max-age=31536000; includeSubDomains; preload' always;
