@@ -59,13 +59,13 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 3. `waf_exempt` — 免检 URI map，**必须先于** `waf_maps`
 4. `waf_maps` — UA/SQLi/XSS/路径规则 map，汇总出 `$waf_hit`、`$waf_action`，定义 `waf_main` 日志格式
 5. `conf_header` → `conf_proxy_header` → `conf_hide_header` — 响应头、反代参数（含 `client_max_body_size 100m`）
-6. `conf.d/*.conf` — 站点 server 块；server 内按需 include `conf_ssl` + `waf_server`
+6. `conf.d/*.conf` — 站点 server 块；server 内按需 include `conf_ssl` + `waf_server`（管理类站点如 termix 改用 `waf_server_lite`）
 
 关键规则：
 
 - **无 `.conf` 后缀的文件是片段，只能被显式 include**；只有站点 server 块放 `.conf`，才会被通配加载。新增片段要同步改 `nginx.conf` 的 include 列表。
 - `.sample` 是模板，仓库不保存线上站点配置；`default.conf.sample` 绑定 `www.xxx.net`，`termix.conf.sample` 绑定 `remote.xcoai.net`。
-- WAF 分两段：`waf_maps` 只打标，`waf_server` 在 server 级执行拦截（命中→403、非法方法→405）并把命中写入 `waf.log`。`$waf_action` 的 `"block"` 改成 `"pass"` 即整站切观察模式；免检路径改 `waf_exempt`。规则只匹配未解码的 `$query_string`，十六进制编码绕过需应用层兜底（文件头注释已说明，改规则前先读）。
+- WAF 分两段：`waf_maps` 只打标，`waf_server` 在 server 级执行拦截（命中→403、非法方法→405）并把命中写入 `waf.log`。`$waf_action` 的 `"block"` 改成 `"pass"` 即整站切观察模式；免检路径改 `waf_exempt`。规则只匹配未解码的 `$query_string`，十六进制编码绕过需应用层兜底（文件头注释已说明，改规则前先读）。管理类站点（termix）改用 `waf_server_lite`：仅拦截 UA/Referer/非法方法，URI/SQLi/XSS 规则只记录不拦截，避免文件路径参数（`/etc/passwd`、`../`）被误伤。
 - 限流：location 内的 `limit_req` 会**替换**而非叠加 server 级的 zone，只能按路径分档（`req_site` / `req_api` / `req_auth`）。
 - 静态内容：`site/`（如 `site/xcloud` 为站点根）、`upload/`（下载类后缀强制 `Content-Disposition: attachment`，其余长缓存）、证书按域名放 `ssl/<domain>/`。这三个目录不入库，由部署机提供。
 - `conf_js` + `http.js`（njs）在 `nginx.conf` 中被注释：官方 `nginx:latest` 不带 njs 模块，启用需自定义镜像。
@@ -96,7 +96,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - `docker-compose-data.yml` 中 MySQL root 密码明文写在 `environment` 里，生产应改 env 文件 / secret。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - ES 挂载路径与官方镜像不匹配（见上）。
-- `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
+- `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 
 ## docs/claude 目录说明
 

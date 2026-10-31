@@ -14,7 +14,9 @@ server {
     ssl_certificate_key        /etc/nginx/ssl/xcoai.net/privkey.pem;
     ssl_trusted_certificate    /etc/nginx/ssl/xcoai.net/chain.pem;
     include                    /etc/nginx/conf.d/conf_ssl;
-    include                    /etc/nginx/conf.d/waf_server;
+    # termix 的文件管理/终端请求会携带 /etc/passwd、../ 等合法路径参数，
+    # 全量 WAF 会误拦，改用精简规则（仅 UA/Referer/方法）
+    include                    /etc/nginx/conf.d/waf_server_lite;
 
     limit_req                  zone=req_site burst=60 nodelay;
     limit_conn                 conn_perip 50;

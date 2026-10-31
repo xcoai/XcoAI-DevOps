@@ -1,0 +1,30 @@
+# ============================================================
+# WAF server 级配置（精简版）
+# 用法：在 server { ... } 内 include，适用于管理类应用（如 termix）
+#
+# 与 waf_server 的区别：只拦截恶意 UA / Referer 与非法方法，
+# 不执行 URI、SQLi、XSS 拦截。管理类应用的文件管理/终端请求会携带
+# /etc/passwd、../、/.git 等合法路径参数，全量规则会误拦；
+# 该类应用依赖自身认证与 conf_limit 限流兜底。
+# 命中仍写入 waf.log（HIT=1 表示本可被全量规则拦截），便于评估规则。
+# ============================================================
+
+# 恶意 Referer（按需保留）
+if ($http_referer ~* "17ce\.com|webscan\.org") {
+    return 403;
+}
+
+# HTTP 方法限制（按业务调整，PATCH默认移除支持，PUT/DELETE后续也要减少使用）
+if ($request_method !~ ^(GET|POST|HEAD|PUT|DELETE|OPTIONS)$) {
+    return 405;
+}
+
+# 恶意 UA 拦截
+if ($waf_ua = 1) {
+    return 403;
+}
+
+# 注意：server 级出现 access_log 后不再继承 http 级日志，主访问日志需在此显式保留
+access_log /var/log/nginx/access.log main if=$loggable_status;
+# 只记录命中请求，便于调规则
+access_log /var/log/nginx/waf.log    waf_main if=$waf_hit;
