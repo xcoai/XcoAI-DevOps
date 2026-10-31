@@ -1,14 +1,14 @@
 ---
 description: 代码审查 — 按全局 CLAUDE.md 第 3、4 节标准，Blocker/Major/Minor/Nit 分级输出
 argument-hint: [文件路径 | 分支名 | 留空=审查当前未提交改动]
-allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(git merge-base:*), Bash(git rev-parse:*)
+allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git merge-base:*), Bash(git rev-parse:*), Bash(git branch:*)
 ---
 
 # /xreview — 代码审查
 
 审查范围参数：$ARGUMENTS（为空时审查工作区全部未提交改动）
 
-## 上下文（自动注入）
+## 上下文（自动注入，仅轻量概览）
 
 当前状态：
 !`git status --short`
@@ -16,16 +16,15 @@ allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git sta
 改动概览：
 !`git diff HEAD --stat`
 
-改动内容：
-!`git diff HEAD`
-
-分支相对主干的改动（若在特性分支上）：
-!`git diff $(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || echo HEAD) --stat 2>/dev/null`
-
 ## 你的约束
 
 - **只审查，不修改文件。** 修复建议以 diff 片段形式给出，由用户决定是否采纳。
-- 若参数指定了路径或分支，以参数为准重新获取 diff；若 diff 超过约 800 行，先按文件列出清单，询问用户优先审查哪些，不要囫囵吞枣。
+- **确定审查范围**：
+  - 参数为空：审查工作区全部未提交改动（含已暂存与未暂存）。
+  - 参数为路径或分支：以参数为准，自行用 `git diff` / `git show` 获取对应范围的改动；审查分支时用 `git merge-base` 确定与主干（main 或 master，用 `git branch` / `git rev-parse` 确认）的分叉点，命令失败时如实说明，不要静默回退。
+  - 上方自动注入的只是概览；全量 diff 由你按需获取，不要依赖注入内容做结论。
+- **`git diff` 不含未跟踪的新文件**：`git status` 中标记 `??` 的文件必须用 Read 逐个读取并纳入审查，不得遗漏。
+- 若 diff 超过约 800 行，先按文件列出清单，询问用户优先审查哪些，不要囫囵吞枣。
 - 只报告你能在代码中指出具体位置的问题，**每条必须带 `文件:行号`**。不确定的写在"需人工确认"，不要升级为 Blocker。
 - 不编造问题凑数。某一级别没有发现就写"无"。
 - 审查时读取被改动文件的完整内容及其直接调用方，不要只看 diff 片段。
@@ -42,12 +41,12 @@ allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git sta
 
 ## 严重度定义（与全局 CLAUDE.md 第 8 节一致）
 
-| 级别 | 定义 | 对合并的影响 |
-|------|------|--------------|
-| **Blocker** | 安全红线、数据丢失/损坏风险、明确的正确性错误 | 必须修复才能合并 |
-| **Major** | 架构违规、性能问题、缺失测试、破坏性变更未版本化 | 应在本 MR 修复，例外需说明 |
-| **Minor** | 可维护性、错误处理不完善、命名/结构问题 | 建议修复，可跟进 |
-| **Nit** | 风格、注释、微小可读性改进 | 可选；最多列 5 条 |
+| 级别 | 编号 | 定义 | 对合并的影响 |
+|------|------|------|--------------|
+| **Blocker** | B1, B2… | 安全红线、数据丢失/损坏风险、明确的正确性错误 | 必须修复才能合并 |
+| **Major** | M1, M2… | 架构违规、性能问题、缺失测试、破坏性变更未版本化 | 应在本 MR 修复，例外需说明 |
+| **Minor** | L1, L2… | 可维护性、错误处理不完善、命名/结构问题 | 建议修复，可跟进 |
+| **Nit** | N1, N2… | 风格、注释、微小可读性改进 | 可选；最多列 5 条 |
 
 ## 输出格式（严格按此结构）
 
@@ -70,10 +69,10 @@ allowed-tools: Read, Grep, Glob, Bash(git diff:*), Bash(git log:*), Bash(git sta
 （同上格式，编号 M1, M2…）
 
 ### Minor
-（同上格式，编号 m1, m2…；可省略 diff）
+（同上格式，编号 L1, L2…；可省略 diff；超过 10 条时归纳共性模式，不逐条罗列）
 
 ### Nit
-（一行一条，编号 n1…，最多 5 条）
+（一行一条，编号 N1…，最多 5 条）
 
 ### 需人工确认
 你无法从代码判断、需要业务或运维背景的疑点。

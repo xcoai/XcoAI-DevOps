@@ -1,7 +1,7 @@
 ---
 description: 复杂任务规划 — 只读分析，输出实施计划，等待确认后再动手
-argument-hint: <任务描述>
-allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git log:*), Bash(git branch:*), Bash(ls:*), Bash(find:*)
+argument-hint: <要做什么，如：给订单接口加分页>
+allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git log:*), Bash(git diff:*), Bash(git branch:*), Bash(ls:*), Bash(find:*)
 ---
 
 # /xplan — 任务规划
@@ -17,11 +17,11 @@ allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git log:*), Bash(git b
 ## 分析步骤
 
 1. 读取项目级 CLAUDE.md（若存在）与相关 README，确认技术栈与约定。
-2. 用 Grep/Glob 定位与任务相关的模块、调用方、测试文件；追踪至少一层调用关系。
-3. 检查 `git status` / `git log --oneline -20`，了解当前工作区状态与近期改动，避免与进行中的工作冲突。
-4. 识别任务是否触及：API 契约、数据库 schema、依赖版本、CI/CD、安全敏感路径（鉴权、加密、PII）。触及则在风险中单列。
+2. 用 Grep/Glob 定位与任务相关的模块、调用方、测试文件；追踪至少一层调用关系——改接口时追踪调用方，改实现时追踪被调方。
+3. 检查 `git status` / `git log --oneline -20` / `git diff`，了解当前工作区状态与近期改动，避免与进行中的工作冲突。
+4. 识别任务是否触及：API 契约、数据库 schema、依赖版本、CI/CD、安全敏感路径（鉴权、加密、密钥/凭证、PII）。触及则在风险中单列。
 
-## 输出格式（严格按此结构）s
+## 输出格式（严格按此结构）
 
 ### 1. 任务理解
 一句话复述目标 + 我识别到的隐含需求/假设（若有）。
@@ -41,7 +41,7 @@ allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git log:*), Bash(git b
 按可能性 × 影响排序，每条给出应对措施；无风险则明确写"未识别到显著风险"。
 
 ### 6. 验证方式
-运行哪些命令（lint / 类型检查 / 具体测试）；需要新增哪些测试及覆盖的路径（正常 / 边界 / 异常）。
+运行哪些命令（lint / 类型检查 / 具体测试，以项目级 CLAUDE.md 声明的验证命令为准）；需要新增哪些测试及覆盖的路径（正常 / 边界 / 异常）。
 
 ### 7. 待确认问题
 需要用户拍板的决策点；没有则写"无"。
@@ -50,4 +50,4 @@ allowed-tools: Read, Grep, Glob, Bash(git status:*), Bash(git log:*), Bash(git b
 顺带发现的问题或改进机会，仅记录，不实施。
 
 ---
-**输出结尾固定为：** "计划已就绪。回复「确认」开始实施，或指出需调整的部分。如需多实例协作，可要求我将本计划写入 `docs/tasks/`。"
+**输出结尾固定为：** "计划已就绪。回复「确认」开始实施，或指出需调整的部分。如需存档，可在确认后要求我（在本命令之外）将计划写入 `docs/tasks/`。"
