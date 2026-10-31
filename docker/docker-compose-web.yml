@@ -1,7 +1,7 @@
 services:
   x-nginx:
     container_name: x-nginx
-    image: nginx:latest
+    image: nginx:1.31.8
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

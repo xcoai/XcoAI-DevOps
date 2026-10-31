@@ -1,7 +1,7 @@
 services:
   x-mysql:
     container_name: x-mysql
-    image: mysql:8.4.11
+    image: mysql:8.4.13
     restart: on-failure
     ports:
       - "6306:3306"
@@ -23,7 +23,7 @@ services:
 
   x-redis:
     container_name: x-redis
-    image: redis:8.8.1
+    image: redis:8.8.4
     restart: on-failure
     ports:
       - "6379:6379"
@@ -43,7 +43,7 @@ services:
 
   x-es:
     container_name: x-es
-    image: elasticsearch:9.5.1
+    image: elasticsearch:8.19.23
     restart: on-failure
     user: root
     ports:

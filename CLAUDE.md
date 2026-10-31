@@ -68,14 +68,14 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - WAF 分两段：`waf_maps` 只打标，`waf_server` 在 server 级执行拦截（命中→403、非法方法→405）并把命中写入 `waf.log`。`$waf_action` 的 `"block"` 改成 `"pass"` 即整站切观察模式；免检路径改 `waf_exempt`。规则只匹配未解码的 `$query_string`，十六进制编码绕过需应用层兜底（文件头注释已说明，改规则前先读）。管理类站点（termix）改用 `waf_server_lite`：仅拦截 UA/Referer/非法方法，URI/SQLi/XSS 规则只记录不拦截，避免文件路径参数（`/etc/passwd`、`../`）被误伤。
 - 限流：location 内的 `limit_req` 会**替换**而非叠加 server 级的 zone，只能按路径分档（`req_site` / `req_api` / `req_auth`）。
 - 静态内容：`site/`（如 `site/xcloud` 为站点根）、`upload/`（下载类后缀强制 `Content-Disposition: attachment`，其余长缓存）、证书按域名放 `ssl/<domain>/`。这三个目录不入库，由部署机提供。
-- `conf_js` + `http.js`（njs）在 `nginx.conf` 中被注释：官方 `nginx:latest` 不带 njs 模块，启用需自定义镜像。
+- `conf_js` + `http.js`（njs）在 `nginx.conf` 中被注释：官方 `nginx:1.31.8` 不带 njs 模块，启用需自定义镜像。
 
 ### 数据层
 
-- **MySQL 8.4.11**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
-- **Redis 8.8.1**：挂载 `redis/redis.conf` 并以该文件启动；当前文件为空，等同全部默认配置（无持久化策略、无认证）。
-- **Elasticsearch 9.5.1**：数据卷挂到 `/bitnami/elasticsearch/data`，而官方镜像的数据目录是 `/usr/share/elasticsearch/data`，持久化路径存疑，依赖 ES 数据前先核实。
-- **Termix**（`ghcr.io/lukegus/termix`）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。
+- **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
+- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；当前文件为空，等同全部默认配置（无持久化策略、无认证）。
+- **Elasticsearch 8.19.23**：数据卷挂到 `/bitnami/elasticsearch/data`，而官方镜像的数据目录是 `/usr/share/elasticsearch/data`，持久化路径存疑，依赖 ES 数据前先核实。当前版本由 9.5.1 降级而来（出于安全修复考虑），仅适用于空数据目录；9.x 数据目录无法被 8.x 直接打开。
+- **Termix**（`ghcr.io/termix-ssh/termix`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；新镜像的端口与挂载兼容性待服务器验证。
 
 ## 约定
 
