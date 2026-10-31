@@ -18,5 +18,7 @@ if ($waf_action = "block") {
     return 403;
 }
 
+# 注意：server 级出现 access_log 后不再继承 http 级日志，主访问日志需在此显式保留
+access_log /var/log/nginx/access.log main if=$loggable_status;
 # 只记录命中请求，便于调规则
-access_log /var/log/nginx/waf.log waf_main if=$waf_hit;
+access_log /var/log/nginx/waf.log    waf_main if=$waf_hit;
