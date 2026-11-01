@@ -74,8 +74,8 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
 - **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；当前文件为空，等同全部默认配置（无持久化策略、无认证）。
-- **Elasticsearch 8.19.23**：数据卷挂到 `/bitnami/elasticsearch/data`，而官方镜像的数据目录是 `/usr/share/elasticsearch/data`，持久化路径存疑，依赖 ES 数据前先核实。当前版本由 9.5.1 降级而来（出于安全修复考虑），仅适用于空数据目录；9.x 数据目录无法被 8.x 直接打开。
-- **Termix**（`ghcr.io/termix-ssh/termix`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；新镜像的端口与挂载兼容性待服务器验证。
+- **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。
+- **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；端口与挂载兼容性待服务器验证。
 
 ## 约定
 
@@ -95,7 +95,6 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 - `docker-compose-data.yml` 中 MySQL root 密码明文写在 `environment` 里，生产应改 env 文件 / secret。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
-- ES 挂载路径与官方镜像不匹配（见上）。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 
 ## docs/claude 目录说明

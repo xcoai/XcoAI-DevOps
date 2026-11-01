@@ -43,6 +43,7 @@ services:
 
   x-es:
     container_name: x-es
+    # 9.x 存在 CVE-2026-51302 等漏洞，暂用已修复的 8.19.x；数据目录为空，可安全降级
     image: elasticsearch:8.19.23
     restart: on-failure
     user: root
@@ -52,7 +53,7 @@ services:
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/es/data:/bitnami/elasticsearch/data
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/es/data:/usr/share/elasticsearch/data
     networks:
       - net-data
 

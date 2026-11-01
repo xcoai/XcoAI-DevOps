@@ -2,7 +2,7 @@ services:
   x-termix:
     container_name: x-termix
     # https://docs.termix.site/install/server/docker
-    image: ghcr.io/termix-ssh/termix:latest
+    image: termixssh/termix:26.10.6
     restart: unless-stopped
     ports:
       - "9980:8080"
