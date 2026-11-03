@@ -1,3 +1,6 @@
+# 部署级覆盖（可选）：复制 conf_custom_header.sample 为 conf_custom_header 并启用站点 include，在其内用 set
+# 覆盖 $proxy_hdr_*（见 conf_map）或直接写 proxy_* 标量；不要把本文件 include 到
+# location（会用这里的请求头数组整体替换 location 自己的 proxy_set_header）。
 client_max_body_size        100m;
 client_body_buffer_size     1024k;
 client_header_buffer_size   512k;

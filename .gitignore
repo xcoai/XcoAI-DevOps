@@ -1,5 +1,10 @@
 .DS_Store
 
-bak
-data
-logs
+bak/
+data/
+logs/
+ssl/
+site/
+upload/
+.workbuddy/
+docker/nginx/conf.d/conf_custom_header

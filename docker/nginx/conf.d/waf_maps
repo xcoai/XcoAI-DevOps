@@ -1,29 +1,36 @@
 # ============================================================
 # WAF 规则变量（http 上下文）
-# 依赖：waf-exempt 需先于本文件 include
+# 依赖：waf_exempt 需先于本文件 include
 #
-# 改规则前先看这三条（都踩过坑）：
+# 改规则前先看这四条（都踩过坑）：
 #   1) 正则必须「整段加引号」写成 "~*..."，nginx 只识别词首引号。
 #      写成 ~*"..." 会把引号当成正则字面量，规则永不命中，而 nginx -t 不报错。
-#   2) 空白一律用 (?:[\s+]|%20|%09|%0a|%0d)，只写 \s 会被 + 和 %20 绕过。
-#   3) $query_string 是 nginx 未解码的原始串，十六进制编码（%55NION = UNION）
-#      识别不了，这是纯 nginx 方案的固有限制，只能靠应用层兜底。
+#   2) 空白/注释分隔统一用 WS=(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)；
+#      只写 \s 会被 +、%20 和 /**/ 绕过。
+#   3) 关键词边界用 (?:(?<![a-z_])|(?<=%0[aAdD])) / (?![a-z0-9_])，不要用 \b：
+#      $query_string 里 %20or 的 %20 以数字 0 结尾，\b 会把 0 和 o 都当单词字符，
+#      导致编码空白的 payload 漏拦；字母边界同时避免 reunion/union、asleep/sleep、
+#      download_file/load_file、retrieval/eval 等子串误报。
+#   4) $query_string 是 nginx 未解码的原始串，十六进制编码（%55NION = UNION）
+#      识别不了；路径规则改用 $uri（已解码/规范化）。WAF 只覆盖常见特征，
+#      不追求规则全覆盖；未识别形式由应用层参数化查询兜底。
 # ============================================================
 
 # ---------------- 恶意 UA ----------------
+# 用单词边界避免 sqlite→sqli、unmapped→nmap、zapier→zap 等误报。
 map $http_user_agent $waf_ua {
     default 0;
     ""      0;
 
-    ~*sqlmap|nikto|nmap|masscan|zgrab|zmap                    1;
-    ~*acunetix|awvs|appscan|netsparker|nessus|openvas|nexpose 1;
-    ~*burp|zap|w3af|wpscan|joomlascan|droopescan              1;
-    ~*dirbuster|gobuster|feroxbuster|wfuzz|ffuf|nuclei|xray   1;
-    ~*havij|pangolin|jsql|sqli                                1;
+    "~*\b(?:sqlmap|nikto|nmap|masscan|zgrab|zmap)\b"             1;
+    "~*\b(?:acunetix|awvs|appscan|netsparker|nessus|openvas|nexpose)\b" 1;
+    "~*\b(?:burp|zap|w3af|wpscan|joomlascan|droopescan)\b"       1;
+    "~*\b(?:dirbuster|gobuster|feroxbuster|wfuzz|ffuf|nuclei|xray)\b" 1;
+    "~*\b(?:havij|pangolin|jsql|sqli)\b"                         1;
 
     # 可选（会误伤压测/监控/搜索引擎），按需注释
-    ~*jmeter|apachebench|webbench|libwww-perl                 1;
-    ~*17ce\.com|yisouspider                                   1;
+    "~*\b(?:jmeter|apachebench|webbench|libwww-perl)\b"          1;
+    "~*(?:17ce\.com|yisouspider)"                                1;
 }
 
 # ---------------- SQL 注入 ----------------
@@ -31,75 +38,130 @@ map $query_string $waf_sqli {
     default 0;
 
     # 注释符/分号后接关键字：' or 1=1-- 、; drop table 、; exec
-    "~*(?:--|#|;)(?:[\s+]|%20|%09|%0a|%0d)*(?:select|union|insert|update|delete|drop|truncate|create|alter|exec|execute)\b" 1;
+    # 同时覆盖 %2d%2d、%23、%3b 编码形式
+    "~*(?:--|#|;|%2d%2d|%23|%3b)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:select|union|insert|update|delete|drop|truncate|create|alter|exec|execute|call|declare|grant|revoke|shutdown)(?![a-z0-9_])" 1;
     # 逻辑短路堆叠：||select 、&&select
-    "~*(?:\|\||&&)(?:[\s+]|%20|%09|%0a|%0d)*(?:select|insert|update|delete|drop|create|alter|truncate|exec|execute)\b"      1;
-    # UNION 注入：union all select 、union%0aselect 、union/**/select
-    "~*union(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:all(?:[\s+]|%20|%09|%0a|%0d)+)?select"                                   1;
+    "~*(?:\|\||&&|%7c%7c|%26%26)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:select|insert|update|delete|drop|create|alter|truncate|exec|execute|call|declare|grant|revoke|shutdown)(?![a-z0-9_])" 1;
+    # UNION 注入：union select 、union all/distinct select 、union(select) 、union/**/select
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))union(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:(?:all|distinct)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*)?(?:\(|%28)?(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*select(?![a-z0-9_])" 1;
     # 内联注释绕过：/**/union/**/select 、/*!50000select*/
-    "~*/\*.*?(?:select|union|sleep|benchmark|load_file).*?\*/"                                                              1;
-    # 时间盲注 / 报错注入
-    "~*(?:sleep|benchmark|extractvalue|updatexml|geometrycollection|pg_sleep|dbms_pipe|xp_cmdshell)(?:[\s+]|%20|%09)*\("    1;
-    "~*waitfor(?:[\s+]|%20|%09)+delay"                                                                                      1;
+    "~*/\*.*?(?:select|union|sleep|benchmark|load_file|extractvalue|updatexml|into)(?![a-z0-9_]).*?\*/" 1;
+    # 时间盲注 / 报错注入（dbms_pipe / xp_cmdshell 的调用不一定带括号，单独匹配）
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:sleep|benchmark|extractvalue|updatexml|geometrycollection|pg_sleep)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\(" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))dbms_pipe(?![a-z0-9_])" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))xp_cmdshell(?![a-z0-9_])" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))waitfor(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+delay(?![a-z0-9_])" 1;
     # 文件读写
-    "~*load_file(?:[\s+]|%20|%09)*\(|into(?:[\s+]|%20|%09)+(?:out|dump)file"                                                1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))load_file(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\(|(?:(?<![a-z_])|(?<=%0[aAdD]))into(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:out|dump)file(?![a-z0-9_])" 1;
     # 元数据探测
-    "~*information_schema|performance_schema|mysql\s*\.\s*user|sysobjects|pg_catalog|sqlite_master"                         1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:information_schema|performance_schema|sysobjects|pg_catalog|sqlite_master)(?![a-z0-9_])|(?:(?<![a-z_])|(?<=%0[aAdD]))mysql(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:\.|%2e)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*user(?![a-z0-9_])" 1;
     # 永真条件：' or '1'='1 、' or 1=1 、'||'1'='1 、admin'--
-    "~*(?:'|%27)(?:[\s+]|%20|%09)*(?:or|and|xor|\|\||&&)"                                                                   1;
-    "~*(?:'|%27)(?:[\s+]|%20|%09)*(?:--|#)"                                                                                 1;
-    "~*(?:or|and|xor)(?:[\s+]|%20|%09)+\d+(?:[\s+]|%20|%09)*=(?:[\s+]|%20|%09)*\d+"                                         1;
-    # 布尔盲注常用函数（必须加 \b，否则 record( / keyword( 会误伤）
-    "~*\b(?:ascii|substring|substr|mid|char|chr|ord|cast|convert)(?:[\s+]|%20|%09)*\("                                      1;
+    "~*(?:'|%27|\x22|%22)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:or|and|xor)(?![a-z0-9_])" 1;
+    "~*(?:'|%27|\x22|%22)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:\|\||&&|%7c%7c|%26%26)" 1;
+    "~*(?:'|%27|\x22|%22)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:--|#|%2d%2d|%23|%3b)" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\d+(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:=|%3d)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\d+" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:'|%27)[^']{0,64}(?:'|%27)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:=|%3d)" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:true|false)(?![a-z0-9_])" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:\(|%28)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\d+(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:=|%3d)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\d+" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:\(|%28)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:select|update|insert|delete)(?![a-z0-9_])" 1;
+    # 布尔盲注常用函数（字母边界避免 record( / keyword( 等误伤）
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:ascii|substring|substr|mid|char|chr|ord|cast|convert)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\(" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:or|and|xor)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+(?:if|exists)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*\(" 1;
 
     # 可选（带 order by 排序参数的接口会误报），默认关闭
-    "~*order(?:[\s+]|%20|%09)+by(?:[\s+]|%20|%09)+\d+"                                                                      1;
+    #"~*(?:(?<![a-z_])|(?<=%0[aAdD]))order(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+by(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)+\d+" 1;
 }
 
 # ---------------- XSS ----------------
 map $query_string $waf_xss {
     default 0;
 
-    ~*(?:<|%3C)\s*(?:script|iframe|object|embed|svg|math|base|link|meta)\b 1;
-    ~*(?:<|%3C)\s*/\s*(?:script|iframe|object|embed)\s*> 1;
-    ~*\bon(?:error|load|click|mouse\w+|focus|blur|submit|input|change|key\w+|pointer\w+|animation\w+|transition\w+|dblclick|contextmenu|drag\w+|scroll|resize|play|pause|toggle)\s*= 1;
-    ~*javascript\s*:|vbscript\s*: 1;
-    ~*data\s*:\s*text/html 1;
-    ~*(?:eval|fromcharcode|document\.cookie|document\.write|settimeout|setinterval)\s*\( 1;
-    # 等号允许 = 或 %3D，否则编码过的 img payload 会绕过
-    ~*(?:<|%3C)\s*img[^>]+on(?:error|load)\s*(?:=|%3D) 1;
+    # 危险标签；同时覆盖 %3C、%2F 编码和标签后的属性
+    "~*(?:<|%3C)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/|/|%2f)*(?:script|iframe|object|embed|svg|math|base|link|meta|img|body|video|audio|details|marquee|form|style|template)(?![a-z0-9_])" 1;
+    # 事件属性：onerror=、onload+%3D、onclick%20= 等
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))on(?:error|load|click|mouse\w+|focus|blur|submit|input|change|key\w+|pointer\w+|animation\w+|transition\w+|dblclick|contextmenu|drag\w+|scroll|resize|play|pause|toggle|beforetoggle|wheel|touch\w+)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:=|%3D)" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:javascript|vbscript)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?::|%3A)" 1;
+    # 只匹配危险的 data: 类型，避免误伤 data:image/png 之类的普通内容
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))data(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?::|%3A)(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:text(?:/|%2f)(?:html|xml)|image(?:/|%2f)svg\+xml|application(?:/|%2f)(?:xhtml\+xml|xml))" 1;
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))(?:eval|fromcharcode|settimeout|setinterval)(?![a-z0-9_])(?:[\s+]|%20|%09|%0a|%0d|/\*.*?\*/)*(?:\(|%28)" 1;
+    # document.cookie 是属性访问，不要求后面有 (
+    "~*(?:(?<![a-z_])|(?<=%0[aAdD]))document\.(?:cookie|write)(?![a-z0-9_])" 1;
 }
 
 # ---------------- 路径/敏感资源 ----------------
-map $request_uri $waf_uri_bad {
+# 只看 $uri（已解码并规范化），不再扫描 query_string；
+# 这样 ?q=../、?next=/etc/passwd 等正常参数不会误报。
+map $uri $waf_uri_bad {
     default 0;
 
-    ~*(?:\.\./|\.\.%2f|%2e%2e/|%2e%2e%2f|%252e%252e%252f|%252e%252e/) 1;
-    ~*/\.(?:git|svn|hg|env|htaccess|htpasswd|ds_store|bash_history|ssh|aws) 1;
-    ~*/(?:wp-admin|wp-login|xmlrpc\.php|phpmyadmin|phpinfo|server-status|actuator|manager/html|adminer) 1;
+    "~*(?:^|/)(?:\.\.|%2e%2e|%252e%252e)(?:/|%2f|%5c|%252f|%255c)" 1;
+    "~*(?:^|/)\.(?:git|svn|hg|env|htaccess|htpasswd|ds_store|bash_history|ssh|aws)(?![a-z0-9])" 1;
+    "~*(?:^|/)(?:wp-admin|wp-login|xmlrpc\.php|phpmyadmin|phpinfo|server-status|actuator|manager/html|adminer)(?![a-z0-9])" 1;
     # 这两条单独加边界：pma 会误伤 /api/pmadmin/list，console 会误伤 /foo/console.log
     # 用 (?![a-z0-9]) 而不是 (?:/|$)，正则里的裸 $ 会被 nginx 当成变量前缀
-    ~*/pma(?![a-z0-9]) 1;
+    "~*(?:^|/)pma(?![a-z0-9])" 1;
     # 若自有 /console 业务路径，请删掉下一行；多排除一个 . 是为了放行 /console.log 这类静态文件
-    ~*/console(?![a-z0-9.]) 1;
-    ~*(?:proc/self/environ|/etc/passwd|/etc/shadow) 1;
-    ~*%00 1;
+    "~*(?:^|/)console(?![a-z0-9.])" 1;
+    "~*(?:proc/self/environ|/etc/passwd|/etc/shadow)(?![a-z0-9])" 1;
+    "~*%00" 1;
+}
+
+# ---------------- Referer / 方法标记 ----------------
+# 在 server 级用于拦截，同时供 waf.log 判断是否需要记录。
+map $http_referer $waf_referer_bad {
+    default 0;
+    "~*17ce\.com|webscan\.org" 1;
+}
+map $request_method $waf_method_bad {
+    default 1;
+    GET     0;
+    POST    0;
+    HEAD    0;
+    PUT     0;
+    DELETE  0;
+    OPTIONS 0;
 }
 
 # ---------------- 汇总命中 ----------------
 map "$waf_ua$waf_sqli$waf_xss$waf_uri_bad" $waf_hit {
     default "";
-    ~1      1;
+    "~1"    1;
 }
 
 # ---------------- 最终动作 ----------------
-# 灰度开关：把 "block" 改成 "pass" 即整体切为观察模式
-map "$waf_hit$waf_exempt" $waf_action {
+# 免检只豁免 query_string 上的 SQLi/XSS；UA 与路径规则仍然拦截。
+map "$waf_sqli$waf_xss" $waf_query_hit {
+    default 0;
+    "~1"    1;
+}
+map "$waf_query_hit$waf_exempt" $waf_query_action {
     default "pass";
-    "10"    "block";   # 命中且未免检
-    "11"    "pass";    # 命中但在免检名单
+    "10"    "block";   # query 命中且未免检
+    "11"    "pass";    # query 命中但在免检名单
+}
+map "$waf_ua$waf_uri_bad" $waf_path_ua_hit {
+    default 0;
+    "~1"    1;
+}
+map "$waf_query_action$waf_path_ua_hit" $waf_action {
+    default "pass";
+    "block0" "block";
+    "block1" "block";
+    "pass1"  "block";
+    "pass0"  "pass";
+}
+
+# 需要写 waf.log 的请求：规则命中、恶意 Referer 或非法方法。
+map "$waf_hit$waf_referer_bad$waf_method_bad" $waf_loggable {
+    default 0;
+    "~1"    1;
 }
 
 # ---------------- 日志格式 ----------------
-log_format waf_main '$remote_addr - $request_method $request_uri '
-                    'UA="$http_user_agent" HIT="$waf_hit" EXEMPT="$waf_exempt"';
+# 日志包含 status、各规则分项和 Referer/方法标记，便于定位误报；
+# Referer 只记是否命中、不记原文，控制日志体积。
+log_format waf_main '$remote_addr - $host [$time_local] "$request" $status '
+                    'UA="$http_user_agent" HIT="$waf_hit" ACTION="$waf_action" '
+                    'UA_RULE="$waf_ua" SQLI="$waf_sqli" XSS="$waf_xss" '
+                    'URI="$waf_uri_bad" REFERER="$waf_referer_bad" METHOD="$waf_method_bad" '
+                    'EXEMPT="$waf_exempt"';

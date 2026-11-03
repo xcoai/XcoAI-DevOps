@@ -19,6 +19,87 @@ map $http_upgrade $connection_upgrade {
 map $http_origin $cors_origin {
     default "";
 }
+
+# ---------------- 可自定义响应头默认值 ----------------
+# conf_header 使用这些变量；部署时在 conf_custom_header 中用 set 覆盖，
+# 置空字符串表示不输出对应 header。不要再定义同名变量/map，否则 nginx 变量冲突。
+map $host $hdr_vary {
+    default "Origin";
+}
+map $host $cors_methods {
+    default "GET,POST,PUT,DELETE,OPTIONS";
+}
+map $host $cors_headers {
+    default "$http_access_control_request_headers";
+}
+map $host $cors_credentials {
+    default "true";
+}
+map $host $cors_private_network {
+    default "true";
+}
+map $host $hdr_csp {
+    default "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self'; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;";
+}
+map $host $hdr_xfo {
+    default "SAMEORIGIN";
+}
+map $host $hdr_xcto {
+    default "nosniff";
+}
+map $host $hdr_xss {
+    default "1; mode=block";
+}
+map $host $hdr_robots {
+    default "noindex, noarchive, nosnippet";
+}
+map $host $hdr_download {
+    default "noopen";
+}
+map $host $hdr_permitted {
+    default "none";
+}
+map $host $hdr_referrer {
+    default "origin-when-cross-origin";
+}
+map $host $hdr_hsts {
+    default "max-age=31536000; includeSubDomains; preload";
+}
+
+# ---------------- 可自定义代理请求头默认值 ----------------
+# 站点 location 使用这些变量；部署时在 conf_custom_header 中用 set 覆盖，
+# 置空字符串表示不向上游发送对应请求头。
+map $host $proxy_hdr_host {
+    default "$http_host";
+}
+map $host $proxy_hdr_upgrade {
+    default "$http_upgrade";
+}
+map $host $proxy_hdr_connection {
+    default $connection_upgrade;
+}
+map $host $proxy_hdr_real_ip {
+    default "$remote_addr";
+}
+map $host $proxy_hdr_proto {
+    default "$scheme";
+}
+map $host $proxy_hdr_forwarded_for {
+    default "$proxy_add_x_forwarded_for";
+}
+
+# ---------------- 下载/文件访问缓存 ----------------
+# 下载类后缀强制 attachment，针对浏览器无法正常浏览的常用附件类型；
+# html/svg 等可浏览类型不在此列，上传类型是否允许由应用后端决定。
+# /upload/ 是上传后文件的下载/在线浏览路径（上传接口走 /api），其中 html 不缓存、其余长缓存
+map $request_filename $download_attachment {
+    default "";
+    "~*\.(txt|pdf|rar|gz|zip|exe|sh|doc|docx|xls|xlsx|ppt|pptx)$" attachment;
+}
+map $request_filename $download_cache_control {
+    default "public, max-age=5184000, immutable";
+    "~*\.(htm|html)$" "no-store";
+}
 #map $uri $has_query {
 #    default 0;
 #    "~*\?" 1;

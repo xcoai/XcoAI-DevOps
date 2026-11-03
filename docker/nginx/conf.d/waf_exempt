@@ -1,4 +1,6 @@
 # 免检 URI：命中 WAF 规则但业务上必须放行的路径
+# 仅豁免 query_string 上的 SQLi/XSS（$waf_sqli/$waf_xss）；
+# 恶意 UA 与路径规则（$waf_ua/$waf_uri_bad）不受影响，仍会拦截。
 # 只对确实需要接收关键字参数的接口开放，应用层仍须参数化查询
 map $uri $waf_exempt {
     default 0;
