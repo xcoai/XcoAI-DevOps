@@ -76,7 +76,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ### 数据层
 
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
-- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；当前文件为空，等同全部默认配置（无持久化策略、无认证）。
+- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；配置监听所有接口并关闭 `protected-mode`（当前 compose 无认证，生产必须限制来源或启用 `requirepass`/ACL）；RDB 持久化到 `/data`，当前 `maxmemory 512mb`/`noeviction`；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
 - **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。
 - **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；端口与挂载兼容性待服务器验证。
 
@@ -97,6 +97,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ## 已知风险（发现即可，未经用户确认不要顺手改）
 
 - `docker-compose-data.yml` 中 MySQL root 密码明文写在 `environment` 里，生产应改 env 文件 / secret。
+- Redis 无认证：`docker-compose-data.yml` 将 6379 发布到宿主机所有网卡，而 `redis/redis.conf` 为适配当前部署设置了 `protected-mode no`；生产应限制宿主机防火墙来源、改为 `127.0.0.1:6379:6379`，或启用 `requirepass`/ACL。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 
