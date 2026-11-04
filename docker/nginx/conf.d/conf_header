@@ -1,16 +1,23 @@
-# always：4xx/5xx（WAF 403、限流 429 等）也输出这些头，前端才能读到跨域错误
-# $cors_origin 默认空；站点在自身 server 内用 if + set 覆盖
-add_header          Vary Origin always;
+# 采用 $hdr_* / $cors_* 定义header变量参数；
+# 默认值：定义在 conf_map 的 $hdr_* / $cors_* map 中；
+# 变量 + always：4xx/5xx（WAF 403、限流 429 等）也输出这些头，前端才能读到跨域错误；
+# 部署注意：
+#    1.需要部署级自定义时，复制 conf_custom_header.sample 为 conf_custom_header 并启用站点 include，用 set 覆盖变量，内含示例（已注释）；默认不加载，基础配置可直接运行；
+#    2.请不要重复 add_header 同名头（nginx 会输出重复响应头，不是替换）；
+#    3.$cors_origin 默认为空，可在conf_custom_header或在自身服务 server 内用 if + set 覆盖。
+add_header          Vary $hdr_vary always;
 add_header          Access-Control-Allow-Origin $cors_origin always;
-add_header          Access-Control-Allow-Methods 'GET,POST,PUT,DELETE,OPTIONS' always;
-add_header          Access-Control-Allow-Credentials true always;
-add_header          Access-Control-Allow-Private-Network true always;
-add_header          Content-Security-Policy "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self'; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;" always;
-add_header          X-Frame-Options SAMEORIGIN always;
-add_header          X-Content-Type-Options nosniff always;
-add_header          X-XSS-Protection '1; mode=block' always;
-add_header          X-Robots-Tag 'noindex, noarchive, nosnippet' always;
-add_header          X-Download-Options noopen always;
-add_header          X-Permitted-Cross-Domain-Policies none always;
-add_header          Referrer-Policy 'origin-when-cross-origin' always;
-add_header          Strict-Transport-Security 'max-age=31536000; includeSubDomains; preload' always;
+add_header          Access-Control-Allow-Methods $cors_methods always;
+# 预检请求回显 Access-Control-Request-Headers；非预检请求为空，不输出
+add_header          Access-Control-Allow-Headers $cors_headers always;
+add_header          Access-Control-Allow-Credentials $cors_credentials always;
+add_header          Access-Control-Allow-Private-Network $cors_private_network always;
+add_header          Content-Security-Policy $hdr_csp always;
+add_header          X-Frame-Options $hdr_xfo always;
+add_header          X-Content-Type-Options $hdr_xcto always;
+add_header          X-XSS-Protection $hdr_xss always;
+add_header          X-Robots-Tag $hdr_robots always;
+add_header          X-Download-Options $hdr_download always;
+add_header          X-Permitted-Cross-Domain-Policies $hdr_permitted always;
+add_header          Referrer-Policy $hdr_referrer always;
+add_header          Strict-Transport-Security $hdr_hsts always;

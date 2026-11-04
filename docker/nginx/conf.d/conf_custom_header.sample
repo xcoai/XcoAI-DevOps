@@ -1,0 +1,90 @@
+# ============================================================
+# 部署级自定义响应头 / 代理参数（模板，不入库实际配置）
+#
+# 用法（可选，站点默认不加载本文件）：
+#   cp docker/nginx/conf.d/conf_custom_header.sample \
+#      docker/nginx/conf.d/conf_custom_header
+#   在需要自定义的站点 .conf 中取消 include conf_custom_header 的注释
+#   docker exec x-nginx nginx -t && docker exec x-nginx nginx -s reload
+#
+# 注意：不要添加后缀名为 .conf，否则会被 nginx.conf 的 include conf.d/*.conf 当作
+# http 级片段重复加载，set/add_header 会因上下文错误导致 nginx -t 失败。
+#
+# 启用后本文件会被 include 到 server 和 location 两种上下文（见站点 .conf），
+# 只能写这两种上下文允许的指令：set / add_header / proxy_set_header /
+# proxy_hide_header / proxy_* 等。不能写 map、limit_req_zone、upstream、
+# server、location；需要 http 级配置请改对应共享文件。
+#
+# 覆盖响应头：set 变量，默认值见 conf_map 的 $hdr_* / $cors_*；
+#   置空字符串表示不输出该响应头。
+# 覆盖代理请求头：set $proxy_hdr_*，默认值见 conf_map；
+#   置空字符串表示不向上游发送该请求头。
+# 补充参数：add_header / proxy_set_header / proxy_* 直接追加。
+# 注意：add_header / proxy_set_header 是数组，同名重复声明会输出重复头，
+#   不是替换；覆盖必须走上面的变量。
+# ============================================================
+
+# 保留默认头。location 中一旦出现 add_header，就不再继承 server/http 的头，
+# 因此本文件在 location 内 include 时必须同时 include conf_header；
+# conf_hide_header 同理（隐藏上游返回的默认安全头）。
+# 若站点已经单独 include 过 conf_header / conf_hide_header，先移除那些行再
+# include 本文件（本文件已经包含它们），避免同名头重复输出。
+include /etc/nginx/conf.d/conf_header;
+include /etc/nginx/conf.d/conf_hide_header;
+
+# ---------------- 覆盖默认响应头 ----------------
+# $cors_origin 由站点 server 的 if + set 按白名单控制，默认空；
+# 不要在这里无条件 set $cors_origin $http_origin，否则等于放开任意跨域。
+# set $hdr_vary "Origin";
+# set $cors_origin "";
+# set $cors_methods "GET,POST,PUT,DELETE,OPTIONS";
+# set $cors_headers "Content-Type,Authorization";
+# set $cors_credentials "false";
+# set $cors_private_network "";
+# set $hdr_csp "default-src 'self' https:; script-src 'self' https:; style-src 'self' https:; img-src 'self' data: https:; frame-ancestors 'self';";
+# set $hdr_xfo "DENY";
+# set $hdr_xcto "nosniff";
+# set $hdr_xss "1; mode=block";
+# set $hdr_robots "noindex, nofollow";
+# set $hdr_download "noopen";
+# set $hdr_permitted "none";
+# set $hdr_referrer "strict-origin-when-cross-origin";
+# set $hdr_hsts "max-age=63072000; includeSubDomains";
+# set $hdr_xfo "";
+
+# 按域名设置不同值（server 上下文示例，按实际 A/B 域名替换）
+# 1) A 页面 iframe 嵌入 B 站点：B 的 CSP 需放行 A 的域名
+# if ($host = "b.example.com") {
+#     set $hdr_xfo "";   # 省略 XFO，避免与 frame-ancestors 冲突；由 CSP 精确控制
+#     # 仅演示 frame-ancestors，实际 CSP 需按 B 的资源来源补全
+#     set $hdr_csp "frame-ancestors 'self' https://a.example.com; default-src 'self';";
+# }
+#
+# 2) A 页面跨域调用 B 接口：只回显公司平台白名单 Origin。
+#    默认 Access-Control-Allow-Credentials: true，必须回显具体 Origin，不能用 *。
+#    不要写 set $cors_origin $http_origin;（等于任意站点可跨域）。
+# if ($http_origin ~* "^https://(a|b)\.example\.com$") {
+#     set $cors_origin $http_origin;
+# }
+# 若同一份自定义文件被多个站点共用，可在外层再包 if ($host = "b.example.com")。
+
+# ---------------- 覆盖代理请求头 ----------------
+# 站点 location 已改用这些变量，覆盖不会产生重复请求头。
+# proxy_set_header 在 location 内会替换继承数组；现有代理 location 已自行定义，
+# 此处只用于追加新头或配合上面的 $proxy_hdr_* 覆盖。若新增的 location 未定义
+# proxy_set_header，追加前先补齐所需默认头。
+# set $proxy_hdr_host "$host";
+# set $proxy_hdr_upgrade $http_upgrade;
+# set $proxy_hdr_connection $connection_upgrade;
+# set $proxy_hdr_real_ip $remote_addr;
+# set $proxy_hdr_proto $scheme;
+# set $proxy_hdr_forwarded_for $proxy_add_x_forwarded_for;
+
+# ---------------- 补充响应头 / 代理参数 ----------------
+# add_header X-Custom-Header "value" always;
+# proxy_read_timeout 600s;
+# proxy_set_header X-Custom-Header "value";
+
+# 若要放行上游返回的某个默认隐藏头，注释上面的 conf_hide_header include，
+# 并只列出仍需隐藏的头（同一上下文会整体替换继承的隐藏列表）：
+# proxy_hide_header X-XSS-Protection;

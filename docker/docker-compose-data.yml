@@ -2,42 +2,59 @@ services:
   x-mysql:
     container_name: x-mysql
     image: mysql:8.4.13
-    restart: on-failure
+    restart: unless-stopped
+    # 默认预留 buffer pool 512m 及连接/临时内存开销，可按机器覆盖
+    mem_limit: "${MYSQL_MEM_LIMIT:-1g}"
     ports:
       - "6306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: "1234"
+      # 优先读取 docker/.env 中的 MYSQL_ROOT_PASSWORD；未配置时仅用于本地启动
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-XcoAI#888}"
       MYSQL_DATABASE: xcoai_data
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/my.cnf:/etc/mysql/my.cnf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", 'exit | mysql -u root -p"$$MYSQL_ROOT_PASSWORD"']
       start_period: 30s
       interval: 20s
       timeout: 10s
       retries: 4
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-data
 
   x-redis:
     container_name: x-redis
     image: redis:8.8.4
-    restart: on-failure
+    restart: unless-stopped
+    # 容器上限应高于 Redis maxmemory，给客户端缓冲、RDB COW 和内存碎片留余量
+    mem_limit: "${REDIS_MEM_LIMIT:-768m}"
     ports:
       - "6379:6379"
     environment:
+      # 优先读取 docker/.env 中的 REDIS_PASSWORD；默认值仅用于本地启动
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-XcoAI#888}"
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/data:/data
-    command: redis-server /etc/redis.conf
+    command: ["redis-server", "/etc/redis.conf", "--requirepass", "${REDIS_PASSWORD:-XcoAI#888}", "--maxmemory", "${REDIS_MAXMEMORY:-512m}"]
     healthcheck:
-      test: ["CMD-SHELL", 'redis-cli ping|grep -e "PONG\|NOAUTH"']
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 10s
       timeout: 5s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-data
 
@@ -45,15 +62,39 @@ services:
     container_name: x-es
     # 9.x 存在 CVE-2026-51302 等漏洞，暂用已修复的 8.19.x；数据目录为空，可安全降级
     image: elasticsearch:8.19.23
-    restart: on-failure
+    restart: unless-stopped
+    # 默认覆盖堆及堆外开销，可按机器覆盖
+    mem_limit: "${ELASTIC_MEM_LIMIT:-1g}"
     user: root
     ports:
       - "6200:9200"
       - "6201:9300"
     environment:
       TZ: Asia/Shanghai
+      # 单节点运行；密码由 docker/.env 的 ELASTIC_PASSWORD 注入
+      discovery.type: single-node
+      ELASTIC_PASSWORD: "${ELASTIC_PASSWORD:-XcoAI#888}"
+      xpack.security.enabled: "true"
+      # 内网部署，不启用 HTTP/transport TLS；外部访问由防火墙限制
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      # Elasticsearch 默认拒绝 root 启动；当前部署采用容器内 root，依赖内网隔离和外部防火墙
+      # JVM 堆由 JAVA_XMS/JAVA_XMX 注入；堆大小应低于容器 mem_limit，给堆外内存留余量
+      ES_JAVA_OPTS: "-Xms${JAVA_XMS:-512m} -Xmx${JAVA_XMX:-512m} -Des.insecure.allow.root=true"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/es/data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", 'curl -fsS -u "elastic:$$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health >/dev/null || exit 1']
+      start_period: 60s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-data
 

@@ -3,13 +3,13 @@
 # 用法：在 server { ... } 内 include
 # ============================================================
 
-# 恶意 Referer（按需保留）
-if ($http_referer ~* "17ce\.com|webscan\.org") {
+# 恶意 Referer（按需保留）；标记同时用于 waf.log 记录
+if ($waf_referer_bad = 1) {
     return 403;
 }
 
 # HTTP 方法限制（按业务调整，PATCH默认移除支持，PUT/DELETE后续也要减少使用）
-if ($request_method !~ ^(GET|POST|HEAD|PUT|DELETE|OPTIONS)$) {
+if ($waf_method_bad = 1) {
     return 405;
 }
 
@@ -20,5 +20,5 @@ if ($waf_action = "block") {
 
 # 注意：server 级出现 access_log 后不再继承 http 级日志，主访问日志需在此显式保留
 access_log /var/log/nginx/access.log main if=$loggable_status;
-# 只记录命中请求，便于调规则
-access_log /var/log/nginx/waf.log    waf_main if=$waf_hit;
+# 记录规则命中、恶意 Referer 和非法方法，便于调规则
+access_log /var/log/nginx/waf.log    waf_main if=$waf_loggable;

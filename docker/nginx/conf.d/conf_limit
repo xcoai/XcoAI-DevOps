@@ -28,7 +28,9 @@ limit_req_zone $limit_key zone=req_api:10m   rate=10r/s;   # 业务 API
 limit_req_zone $limit_key zone=req_auth:10m  rate=1r/s;    # 登录 / 短信 / 注册
 
 # 并发连接数：防连接耗尽，与 limit_req（请求速率）是两回事
-limit_conn_zone $binary_remote_addr zone=conn_perip:10m;
+limit_conn_zone $limit_key zone=conn_perip:10m;
 
 limit_req_status     429;    # 默认 503，429 语义更准，前端好区分
 limit_req_log_level  warn;   # 默认 error，被限流时会刷满 error.log
+limit_conn_status    429;    # 默认 503，与请求限流保持一致的语义
+limit_conn_log_level warn;   # 默认 error，避免连接限流刷满 error.log
