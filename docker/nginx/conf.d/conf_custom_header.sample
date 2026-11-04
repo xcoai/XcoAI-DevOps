@@ -41,7 +41,7 @@ include /etc/nginx/conf.d/conf_hide_header;
 # set $cors_headers "Content-Type,Authorization";
 # set $cors_credentials "false";
 # set $cors_private_network "";
-# set $hdr_csp "default-src 'self'; script-src 'self' https://cdn.example.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-ancestors 'self';";
+# set $hdr_csp "default-src 'self' https:; script-src 'self' https:; style-src 'self' https:; img-src 'self' data: https:; frame-ancestors 'self';";
 # set $hdr_xfo "DENY";
 # set $hdr_xcto "nosniff";
 # set $hdr_xss "1; mode=block";

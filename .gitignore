@@ -7,4 +7,5 @@ ssl/
 site/
 upload/
 .workbuddy/
+docker/.env
 docker/nginx/conf.d/conf_custom_header

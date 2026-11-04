@@ -36,7 +36,7 @@ cp docker/nginx/conf.d/termix.conf.sample  docker/nginx/conf.d/termix.conf    # 
 docker compose -f docker-compose-web.yml config      # compose 语法与变量插值
 docker exec x-nginx nginx -t                         # 改 nginx 配置后先测语法
 docker exec x-nginx nginx -s reload                  # 配置为只读挂载，刷新配置无需重启
-docker exec x-redis redis-cli ping                   # PONG
+docker exec x-redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'  # PONG
 docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日志（另有 waf.log）
 ```
 
@@ -76,8 +76,9 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ### 数据层
 
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
-- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；配置监听所有接口并关闭 `protected-mode`（当前 compose 无认证，生产必须限制来源或启用 `requirepass`/ACL）；RDB 持久化到 `/data`，当前 `maxmemory 512mb`/`noeviction`；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
-- **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。
+- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
+- **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。当前部署采用容器内 `user: root`，JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`），`ES_JAVA_OPTS` 保留 `-Des.insecure.allow.root=true` 以简化数据目录权限，依赖内网隔离和外部防火墙；如需提高安全等级，可改为非 root 用户并预授权数据目录。
+- **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP，外部访问由防火墙限制）。
 - **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；端口与挂载兼容性待服务器验证。
 
 ## 约定
@@ -85,19 +86,20 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - 容器名 `x-` 前缀，网络名 `net-` 前缀，每个 stack 独立 bridge 网络。
 - 对外端口刻意错开默认值：MySQL 6306、ES 6200/6201、Termix 9980。
 - 卷路径统一 `${DOCKER_VOLUME_DIRECTORY:-.}/<组件>/<子目录>`，配置与数据目录同名放在组件子目录下。
-- `.gitignore` 忽略 `.DS_Store`、`data/`、`logs/`、`bak/`、`ssl/`、`site/`、`upload/`、`.workbuddy/`、`docker/nginx/conf.d/conf_custom_header`；注意别把私钥或大文件提交进去。
+- `.gitignore` 忽略 `.DS_Store`、`data/`、`logs/`、`bak/`、`ssl/`、`site/`、`upload/`、`.workbuddy/`、`docker/.env`、`docker/nginx/conf.d/conf_custom_header`；注意别把私钥或大文件提交进去。
 - 配置注释按现有风格用中文，踩坑说明写在文件头（`conf_limit`、`waf_maps` 是范例），改规则时同步更新。
+- 数据服务统一使用 `restart: unless-stopped`，并配置 `mem_limit` 与 json-file 日志轮转；内存和日志参数可通过 `docker/.env` 覆盖（`MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`REDIS_MAXMEMORY`、`ELASTIC_MEM_LIMIT`、`JAVA_XMS`、`JAVA_XMX`、`LOG_MAX_SIZE`、`LOG_MAX_FILE`），未设置时使用 Compose 默认值。`JAVA_XMS`/`JAVA_XMX` 当前用于 x-es，堆应低于 `ELASTIC_MEM_LIMIT`；`REDIS_MAXMEMORY` 应低于 `REDIS_MEM_LIMIT`。ES 健康检查通过本地 HTTP 和 `elastic` 用户认证。
 
 ## 项目级声明（对应全局 CLAUDE.md 第 7 节）
 
 - **验证命令**：见「常用命令」末尾；无 lint / 类型检查 / 单元测试 / 构建。
 - **技术栈**：Docker Compose（非 k8s）+ Nginx（WAF/限流/反代）+ MySQL / Redis / Elasticsearch + Termix / guacd；无应用代码。
-- **性能预算**：不适用（无应用接口）。基础设施侧现值：`client_max_body_size 100m`，代理 connect 360s / send 240s / read 240s，见 `conf_proxy_header`。
+- **性能预算**：不适用（无应用接口）。基础设施侧现值：`client_max_body_size 100m`，代理 connect 360s / send 240s / read 240s，见 `conf_proxy_header`；示例站点 443 启用 HTTP/2，`nginx.conf` 启用 gzip。
 
 ## 已知风险（发现即可，未经用户确认不要顺手改）
 
-- `docker-compose-data.yml` 中 MySQL root 密码明文写在 `environment` 里，生产应改 env 文件 / secret。
-- Redis 无认证：`docker-compose-data.yml` 将 6379 发布到宿主机所有网卡，而 `redis/redis.conf` 为适配当前部署设置了 `protected-mode no`；生产应限制宿主机防火墙来源、改为 `127.0.0.1:6379:6379`，或启用 `requirepass`/ACL。
+- `docker-compose-data.yml` 的 MySQL root 密码通过 `${MYSQL_ROOT_PASSWORD:-XcoAI#888}` 读取，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖，禁止提交 `.env`。
+- Redis 认证：`docker-compose-data.yml` 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖。6379 仍发布到宿主机所有网卡，需由外部防火墙限制来源。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 

@@ -22,15 +22,15 @@ map $http_user_agent $waf_ua {
     default 0;
     ""      0;
 
-    "~*\b(?:sqlmap|nikto|nmap|masscan|zgrab|zmap)\b"             1;
+    "~*\b(?:sqlmap|nikto|nmap|masscan|zgrab|zmap)\b" 1;
     "~*\b(?:acunetix|awvs|appscan|netsparker|nessus|openvas|nexpose)\b" 1;
-    "~*\b(?:burp|zap|w3af|wpscan|joomlascan|droopescan)\b"       1;
+    "~*\b(?:burp|zap|w3af|wpscan|joomlascan|droopescan)\b" 1;
     "~*\b(?:dirbuster|gobuster|feroxbuster|wfuzz|ffuf|nuclei|xray)\b" 1;
-    "~*\b(?:havij|pangolin|jsql|sqli)\b"                         1;
+    "~*\b(?:havij|pangolin|jsql|sqli)\b" 1;
 
     # 可选（会误伤压测/监控/搜索引擎），按需注释
-    "~*\b(?:jmeter|apachebench|webbench|libwww-perl)\b"          1;
-    "~*(?:17ce\.com|yisouspider)"                                1;
+    "~*\b(?:jmeter|apachebench|webbench|libwww-perl)\b" 1;
+    "~*(?:17ce\.com|yisouspider)" 1;
 }
 
 # ---------------- SQL 注入 ----------------

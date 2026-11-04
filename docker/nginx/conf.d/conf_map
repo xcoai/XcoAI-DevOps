@@ -38,8 +38,9 @@ map $host $cors_credentials {
 map $host $cors_private_network {
     default "true";
 }
+# 兼容多产品前端的内联脚本/样式及 eval；如需更严格，可按站点覆盖并移除对应项
 map $host $hdr_csp {
-    default "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: http: https:; font-src 'self' blob: data: http: https:; img-src 'self' blob: data: http: https:; style-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:; frame-ancestors 'self'; default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ws: wss: http: https:;";
+    default "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https:; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https:; worker-src 'self' blob: data: https:; font-src 'self' blob: data: https:; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline' https:; frame-ancestors 'self'; default-src 'self' 'unsafe-eval' blob: data: wss: https:;";
 }
 map $host $hdr_xfo {
     default "SAMEORIGIN";
@@ -100,7 +101,7 @@ map $request_filename $download_cache_control {
     default "public, max-age=5184000, immutable";
     "~*\.(htm|html)$" "no-store";
 }
-#map $uri $has_query {
+#map $request_uri $has_query {
 #    default 0;
 #    "~*\?" 1;
 #}

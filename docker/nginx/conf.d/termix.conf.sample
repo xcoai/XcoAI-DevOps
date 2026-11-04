@@ -5,6 +5,7 @@ server {
 }
 server {
     listen                     443 ssl;
+    http2                      on;
     server_name                remote.xcoai.net;
     ssl_certificate            /etc/nginx/ssl/xcoai.net/fullchain.pem;
     ssl_certificate_key        /etc/nginx/ssl/xcoai.net/privkey.pem;
