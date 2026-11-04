@@ -65,7 +65,9 @@ services:
     restart: unless-stopped
     # 默认覆盖堆及堆外开销，可按机器覆盖
     mem_limit: "${ELASTIC_MEM_LIMIT:-1g}"
-    user: root
+    # Elasticsearch 8.x 不允许 root 启动；使用镜像内置 elasticsearch 用户（UID 1000）
+    # 部署机需预授权数据目录：chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data
+    user: "1000:0"
     ports:
       - "6200:9200"
       - "6201:9300"
@@ -79,9 +81,8 @@ services:
       xpack.security.http.ssl.enabled: "false"
       xpack.security.transport.ssl.enabled: "false"
       xpack.security.enrollment.enabled: "false"
-      # Elasticsearch 默认拒绝 root 启动；当前部署采用容器内 root，依赖内网隔离和外部防火墙
       # JVM 堆由 JAVA_XMS/JAVA_XMX 注入；堆大小应低于容器 mem_limit，给堆外内存留余量
-      ES_JAVA_OPTS: "-Xms${JAVA_XMS:-512m} -Xmx${JAVA_XMX:-512m} -Des.insecure.allow.root=true"
+      ES_JAVA_OPTS: "-Xms${JAVA_XMS:-512m} -Xmx${JAVA_XMX:-512m}"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/es/data:/usr/share/elasticsearch/data
     healthcheck:

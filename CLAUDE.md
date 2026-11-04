@@ -77,7 +77,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
 - **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
-- **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。当前部署采用容器内 `user: root`，JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`），`ES_JAVA_OPTS` 保留 `-Des.insecure.allow.root=true` 以简化数据目录权限，依赖内网隔离和外部防火墙；如需提高安全等级，可改为非 root 用户并预授权数据目录。
+- **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。Elasticsearch 8.x 不允许 root 启动，容器使用镜像内置 `elasticsearch` 用户（`user: "1000:0"`）；部署机需预授权数据目录属主：`chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data`。JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`）。
 - **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP，外部访问由防火墙限制）。
 - **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；端口与挂载兼容性待服务器验证。
 
