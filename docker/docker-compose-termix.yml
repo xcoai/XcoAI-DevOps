@@ -7,9 +7,17 @@ services:
     ports:
       - "9980:8080"
     volumes:
+      # 默认 SQLite 及 MySQL 模式下都保留：密钥、插件和上传文件存放在 DATA_DIR
       - ${DOCKER_VOLUME_DIRECTORY:-.}/termix/data:/app/data
+    extra_hosts:
+      # 仅在启用 MySQL/PostgreSQL 时经宿主机端口访问；默认 SQLite 不受影响
+      - "host.docker.internal:host-gateway"
     environment:
       PORT: "8080"
+      # 留空时 Termix 默认使用 SQLite；在 docker/.env 配置 TERMIX_DB_* 后切换
+      DATABASE_DIALECT: "${TERMIX_DB_DIALECT:-}"
+      DATABASE_URL: "${TERMIX_DB_URL:-}"
+      DATABASE_POOL_MAX: "${TERMIX_DB_POOL_MAX:-}"
     depends_on:
       - x-guacd
     networks:

@@ -16,7 +16,7 @@ cd docker
 # 启动 / 停止（三套 stack 互相独立，可单独启停，建议按以下顺序）
 docker compose -f docker-compose-data.yml up -d             # x-mysql :6306 + x-redis :6379 + x-es :6200,6201
 # docker compose -f docker-compose-data.yml up -d x-mysql     # 只起单个服务
-docker compose -f docker-compose-termix.yml up -d           # x-termix :9980 + x-guacd :9922
+docker compose -f docker-compose-termix.yml up -d           # x-termix :9980 + x-guacd :9922（默认 SQLite；启用 MySQL 时先启动 data stack）
 docker compose -f docker-compose-web.yml up -d              # x-nginx, 80/443
 docker compose -f <file>.yml down                           # 停止（旧版命令为 docker-compose ...）
 ```
@@ -33,7 +33,9 @@ cp docker/nginx/conf.d/termix.conf.sample  docker/nginx/conf.d/termix.conf    # 
 验证（本仓库唯一的自验证手段，无 lint/test/build）：
 
 ```bash
-docker compose -f docker-compose-web.yml config      # compose 语法与变量插值
+docker compose -f docker-compose-data.yml config      # compose 语法与变量插值
+docker compose -f docker-compose-termix.yml config
+docker compose -f docker-compose-web.yml config
 docker exec x-nginx nginx -t                         # 改 nginx 配置后先测语法
 docker exec x-nginx nginx -s reload                  # 配置为只读挂载，刷新配置无需重启
 docker exec x-redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'  # PONG
@@ -50,7 +52,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 | `docker-compose-termix.yml` | `x-termix`（9980→8080）、`x-guacd`（9922→4822） | `net-termix` |
 | `docker-compose-web.yml` | `x-nginx`（80/443） | `net-web` |
 
-**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。
+**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。termix 默认使用 SQLite，无需 data stack；启用 MySQL 时通过同一方式访问 `host.docker.internal:6306/termix_data`，需先启动 data stack。
 
 ### nginx 配置分层（改配置前必读）
 
@@ -79,7 +81,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
 - **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。Elasticsearch 8.x 不允许 root 启动，容器使用镜像内置 `elasticsearch` 用户（`user: "1000:0"`）；部署机需预授权数据目录属主：`chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data`。JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`）。
 - **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP，外部访问由防火墙限制）。
-- **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd；端口与挂载兼容性待服务器验证。
+- **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。默认使用 SQLite，无需额外配置即可启动；启用 MySQL 时在 `docker/.env` 设置 `TERMIX_DB_DIALECT=mysql`、`TERMIX_DB_URL=mysql://termix:<url-encoded-password>@host.docker.internal:6306/termix_data?ssl=false`（URL 中密码需 URL 编码；`ssl=false` 显式关闭 TLS；mysql2 不支持 JDBC 的 `allowPublicKeyRetrieval`，非 TLS 下会自动请求 RSA 公钥）、`TERMIX_DB_POOL_MAX=10`，compose 映射为 `DATABASE_*`，并通过 `extra_hosts: host-gateway` 跨 stack 访问；需先启动 data stack 并预先创建 `termix_data` 库/用户。`/app/data` 卷在两种模式下都保留（密钥、插件、上传文件），MySQL 模式备份需同时覆盖 `termix_data` 库和该目录。端口与挂载兼容性待服务器验证。
 
 ## 约定
 
@@ -88,7 +90,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - 卷路径统一 `${DOCKER_VOLUME_DIRECTORY:-.}/<组件>/<子目录>`，配置与数据目录同名放在组件子目录下。
 - `.gitignore` 忽略 `.DS_Store`、`data/`、`logs/`、`bak/`、`ssl/`、`site/`、`upload/`、`.workbuddy/`、`docker/.env`、`docker/nginx/conf.d/conf_custom_header`；注意别把私钥或大文件提交进去。
 - 配置注释按现有风格用中文，踩坑说明写在文件头（`conf_limit`、`waf_maps` 是范例），改规则时同步更新。
-- 数据服务统一使用 `restart: unless-stopped`，并配置 `mem_limit` 与 json-file 日志轮转；内存和日志参数可通过 `docker/.env` 覆盖（`MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`REDIS_MAXMEMORY`、`ELASTIC_MEM_LIMIT`、`JAVA_XMS`、`JAVA_XMX`、`LOG_MAX_SIZE`、`LOG_MAX_FILE`），未设置时使用 Compose 默认值。`JAVA_XMS`/`JAVA_XMX` 当前用于 x-es，堆应低于 `ELASTIC_MEM_LIMIT`；`REDIS_MAXMEMORY` 应低于 `REDIS_MEM_LIMIT`。ES 健康检查通过本地 HTTP 和 `elastic` 用户认证。
+- 数据服务统一使用 `restart: unless-stopped`，并配置 `mem_limit` 与 json-file 日志轮转；内存和日志参数可通过 `docker/.env` 覆盖（`MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`REDIS_MAXMEMORY`、`ELASTIC_MEM_LIMIT`、`JAVA_XMS`、`JAVA_XMX`、`LOG_MAX_SIZE`、`LOG_MAX_FILE`），未设置时使用 Compose 默认值。`JAVA_XMS`/`JAVA_XMX` 当前用于 x-es，堆应低于 `ELASTIC_MEM_LIMIT`；`REDIS_MAXMEMORY` 应低于 `REDIS_MEM_LIMIT`。ES 健康检查通过本地 HTTP 和 `elastic` 用户认证。Termix 可选 MySQL 配置通过 `TERMIX_DB_DIALECT`、`TERMIX_DB_URL`、`TERMIX_DB_POOL_MAX` 注入，留空时使用 SQLite。
 
 ## 项目级声明（对应全局 CLAUDE.md 第 7 节）
 
@@ -100,6 +102,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 - `docker-compose-data.yml` 的 MySQL root 密码通过 `${MYSQL_ROOT_PASSWORD:-XcoAI#888}` 读取，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖，禁止提交 `.env`。
 - Redis 认证：`docker-compose-data.yml` 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖。6379 仍发布到宿主机所有网卡，需由外部防火墙限制来源。
+- Termix 默认 SQLite；启用 MySQL 时需在 `docker/.env` 配置 `TERMIX_DB_DIALECT`/`TERMIX_DB_URL`/`TERMIX_DB_POOL_MAX`，并预先在 MySQL 创建 `termix_data` 库/用户。`TERMIX_DB_URL` 含密码（需 URL 编码）并使用 `ssl=false` 明文连接；仅限内网，跨不可信网络须启用 TLS。`.env` 已 gitignore，禁止提交或输出。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 
