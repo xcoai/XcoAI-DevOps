@@ -13,10 +13,11 @@ XcoAI-DevOps 是「AI 运行环境」的**部署配置仓库**：Docker Compose 
 ```bash
 cd docker
 
-# 启动 / 停止（三套 stack 互相独立，可单独启停，建议按以下顺序）
+# 启动 / 停止（四套 stack 互相独立，可单独启停，建议按以下顺序）
 docker compose -f docker-compose-data.yml up -d             # x-mysql :6306 + x-redis :6379 + x-es :6200,6201
 # docker compose -f docker-compose-data.yml up -d x-mysql     # 只起单个服务
 docker compose -f docker-compose-termix.yml up -d           # x-termix :9980 + x-guacd :9922（默认 SQLite；启用 MySQL 时先启动 data stack）
+docker compose -f docker-compose-ai.yml up -d               # x-new-api :9960（MySQL 存储 + Redis 缓存；先启动 data stack）
 docker compose -f docker-compose-web.yml up -d              # x-nginx, 80/443
 docker compose -f <file>.yml down                           # 停止（旧版命令为 docker-compose ...）
 ```
@@ -35,6 +36,7 @@ cp docker/nginx/conf.d/termix.conf.sample  docker/nginx/conf.d/termix.conf    # 
 ```bash
 docker compose -f docker-compose-data.yml config      # compose 语法与变量插值
 docker compose -f docker-compose-termix.yml config
+docker compose -f docker-compose-ai.yml config
 docker compose -f docker-compose-web.yml config
 docker exec x-nginx nginx -t                         # 改 nginx 配置后先测语法
 docker exec x-nginx nginx -s reload                  # 配置为只读挂载，刷新配置无需重启
@@ -44,15 +46,16 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 ## 架构
 
-### 三套独立 stack
+### 四套独立 stack
 
 | Compose | 容器（宿主机端口 → 容器端口） | 网络 |
 |---|---|---|
 | `docker-compose-data.yml` | `x-mysql`（6306→3306）、`x-redis`（6379）、`x-es`（6200/6201→9200/9300） | `net-data` |
 | `docker-compose-termix.yml` | `x-termix`（9980→8080）、`x-guacd`（9922→4822） | `net-termix` |
+| `docker-compose-ai.yml` | `x-new-api`（9960→3000） | `net-ai` |
 | `docker-compose-web.yml` | `x-nginx`（80/443） | `net-web` |
 
-**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。termix 默认使用 SQLite，无需 data stack；启用 MySQL 时通过同一方式访问 `host.docker.internal:6306/termix_data`，需先启动 data stack。
+**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。termix 默认使用 SQLite，无需 data stack；启用 MySQL 时通过同一方式访问 `host.docker.internal:6306/termix_data`，需先启动 data stack。new-api 使用 MySQL 和 Redis，分别通过 `host.docker.internal:6306`、`host.docker.internal:6379` 访问，连接串由 `NEWAPI_SQL_DSN` / `NEWAPI_REDIS_CONN_STRING` 注入，同样需先启动 data stack。
 
 ### nginx 配置分层（改配置前必读）
 
@@ -83,10 +86,18 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP）。
 - **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。默认使用 SQLite，无需额外配置即可启动；启用 MySQL 时在 `docker/.env` 设置 `TERMIX_DB_DIALECT=mysql`、`TERMIX_DB_URL=mysql://termix:<url-encoded-password>@host.docker.internal:6306/termix_data?ssl=false`（URL 中密码需 URL 编码；`ssl=false` 显式关闭 TLS）、`TERMIX_DB_POOL_MAX=10`，compose 映射为 `DATABASE_*`，并通过 `extra_hosts: host-gateway` 跨 stack 访问；需先启动 data stack 并预先创建 `termix_data` 库/用户。`/app/data` 卷在两种模式下都保留（密钥、插件、上传文件），MySQL 模式备份需同时覆盖 `termix_data` 库和该目录。
 
+### New API
+
+- **New API**（`calciumion/new-api:v1.0.0-rc.48`）是 AI 网关，独立 `net-ai` stack；容器 `x-new-api`，宿主机 `9960` → 容器 `3000`，数据与日志分别挂载到 `new-api/data`、`new-api/logs`，启动参数为 `--log-dir /app/logs`。
+- MySQL 必填：`docker/.env` 的 `NEWAPI_SQL_DSN` 使用 Go DSN（如 `user:password@tcp(host.docker.internal:6306)/dbname?charset=utf8mb4&parseTime=True&loc=Local`），compose 映射为 `SQL_DSN`；凭据不要 URL 编码，需先启动 data stack 并预建库/用户。
+- `NEWAPI_SESSION_SECRET` 必填，compose 映射为 `SESSION_SECRET`，使用 `openssl rand -hex 32` 生成固定随机值；未配置时 compose 拒绝启动。
+- Redis 必填：`NEWAPI_REDIS_CONN_STRING` 映射为 `REDIS_CONN_STRING`，复用 data stack 的 `x-redis`（`host.docker.internal:6379`）；URL 中密码需 URL 编码，修改 `REDIS_PASSWORD` 后需同步更新。
+- 会话 Cookie 加固（可选）：`SESSION_COOKIE_SECURE` 由 `NEWAPI_SESSION_COOKIE_SECURE` 注入，默认 `false`；设为 `true` 时必须同时设置 `NEWAPI_SESSION_COOKIE_TRUSTED_URL`（映射 `SESSION_COOKIE_TRUSTED_URL`），值为用户实际访问的精确 HTTPS Origin（如 `https://api.example.com`，多个用逗号分隔，不支持路径/通配符）。new-api 在 `SECURE=true` 但缺少该值时启动即退出（`common/init.go` 调用 `InitSessionCookieSettings` 后 `log.Fatal`）；`SECURE=false` 却设置 trusted URL 也会启动失败。纯 HTTP 直连 `:9960` 时 refresh/logout 会被 OriginGuard 拒绝。
+
 ## 约定
 
 - 容器名 `x-` 前缀，网络名 `net-` 前缀，每个 stack 独立 bridge 网络。
-- 对外端口刻意错开默认值：MySQL 6306、ES 6200/6201、Termix 9980。
+- 对外端口刻意错开默认值：MySQL 6306、ES 6200/6201、Termix 9980、New API 9960。
 - 卷路径统一 `${DOCKER_VOLUME_DIRECTORY:-.}/<组件>/<子目录>`，配置与数据目录同名放在组件子目录下。
 - `.gitignore` 忽略 `.DS_Store`、`data/`、`logs/`、`bak/`、`ssl/`、`site/`、`upload/`、`.workbuddy/`、`docker/.env`、`docker/nginx/conf.d/conf_custom_header`；注意别把私钥或大文件提交进去。
 - 配置注释按现有风格用中文，踩坑说明写在文件头（`conf_limit`、`waf_maps` 是范例），改规则时同步更新。
@@ -95,7 +106,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ## 项目级声明（对应全局 CLAUDE.md 第 7 节）
 
 - **验证命令**：见「常用命令」末尾；无 lint / 类型检查 / 单元测试 / 构建。
-- **技术栈**：Docker Compose（非 k8s）+ Nginx（WAF/限流/反代）+ MySQL / Redis / Elasticsearch + Termix / guacd；无应用代码。
+- **技术栈**：Docker Compose（非 k8s）+ Nginx（WAF/限流/反代）+ MySQL / Redis / Elasticsearch + Termix / guacd + new-api；无应用代码。
 - **性能预算**：不适用（无应用接口）。基础设施侧现值：`client_max_body_size 100m`，代理 connect 360s / send 240s / read 240s，见 `conf_proxy_header`；示例站点 443 启用 HTTP/2，`nginx.conf` 启用 gzip。
 
 ## 已知风险（发现即可，未经用户确认不要顺手改）
@@ -103,6 +114,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - `docker-compose-data.yml` 的 MySQL root 密码通过 `${MYSQL_ROOT_PASSWORD:-XcoAI#888}` 读取，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖，禁止提交 `.env`。
 - Redis 认证：`docker-compose-data.yml` 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖。
 - Termix 默认 SQLite；启用 MySQL 时需在 `docker/.env` 配置 `TERMIX_DB_DIALECT`/`TERMIX_DB_URL`/`TERMIX_DB_POOL_MAX`，并预先在 MySQL 创建 `termix_data` 库/用户。`TERMIX_DB_URL` 含密码（需 URL 编码）并使用 `ssl=false` 明文连接；仅限内网，跨不可信网络须启用 TLS。`.env` 已 gitignore，禁止提交或输出。
+- New API 使用 `NEWAPI_SQL_DSN`（含密码，Go DSN）、`NEWAPI_SESSION_SECRET`、`NEWAPI_REDIS_CONN_STRING`（含密码，需 URL 编码），以及可选的 `NEWAPI_SESSION_COOKIE_SECURE` / `NEWAPI_SESSION_COOKIE_TRUSTED_URL`；`.env` 已 gitignore，禁止提交或输出。MySQL DSN 与 Redis URL 均为明文连接，仅限内网，跨不可信网络须启用 TLS。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。
 

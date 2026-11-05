@@ -1,6 +1,6 @@
 # 部署操作
 
-以下命令均在仓库的 `docker/` 目录执行（示例路径 `/opt/ai/XcoAI-DevOps/docker`，以实际部署路径为准）。三套 stack 相互独立，可单独启停。
+以下命令均在仓库的 `docker/` 目录执行（示例路径 `/opt/ai/XcoAI-DevOps/docker`，以实际部署路径为准）。四套 stack 相互独立，可单独启停。
 
 ## 首次准备
 
@@ -30,6 +30,10 @@ docker compose -f docker-compose-data.yml down
 docker compose -f docker-compose-termix.yml up -d
 docker compose -f docker-compose-termix.yml down
 
+# AI：new-api（MySQL 存储 + Redis 缓存）；先启动 data stack，并按 new-api/Readme.md 建库
+docker compose -f docker-compose-ai.yml up -d
+docker compose -f docker-compose-ai.yml down
+
 # Web：Nginx
 docker compose -f docker-compose-web.yml up -d
 docker compose -f docker-compose-web.yml down
@@ -42,12 +46,14 @@ docker compose -f docker-compose-web.yml down
 ```bash
 docker compose -f docker-compose-data.yml config
 docker compose -f docker-compose-termix.yml config
+docker compose -f docker-compose-ai.yml config
 docker compose -f docker-compose-web.yml config
 
 docker exec x-nginx nginx -t
 docker exec x-nginx nginx -s reload
 docker ps
 docker logs --tail=100 x-nginx
+docker logs --tail=100 x-new-api                         # new-api 启动 / SQL_DSN、Redis 连接错误
 ```
 
 - Nginx 配置为只读挂载，修改后先执行 `nginx -t`，再执行 `nginx -s reload`，无需重启容器。

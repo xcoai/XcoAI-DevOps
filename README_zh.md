@@ -1,6 +1,6 @@
 # XcoAI-DevOps
 
-XcoAI 运行环境的部署配置仓库：包含数据中间件、Termix Web 终端和 Nginx 网关的 Docker Compose 配置；应用服务不在本仓库内。
+XcoAI 运行环境的部署配置仓库：包含数据中间件、Termix Web 终端、new-api 和 Nginx 网关的 Docker Compose 配置；其他应用服务不在本仓库内。
 
 ## 目录结构
 
@@ -8,12 +8,14 @@ XcoAI 运行环境的部署配置仓库：包含数据中间件、Termix Web 终
 docker/
 ├── docker-compose-data.yml     MySQL、Redis、Elasticsearch
 ├── docker-compose-termix.yml   Termix 与 guacd
+├── docker-compose-ai.yml       new-api
 ├── docker-compose-web.yml      Nginx
 ├── nginx/                      Nginx 入口配置、片段与站点模板
 ├── mysql/                      MySQL 配置与数据
 ├── redis/                      Redis 配置与数据
 ├── es/                         Elasticsearch 数据
-└── termix/                     Termix 数据与说明
+├── termix/                     Termix 数据与说明
+└── new-api/                    new-api 数据与日志
 ```
 
 上述组件目录下的 README 记录对应的配置细节。
@@ -23,7 +25,7 @@ docker/
 - Docker Engine 20.10+，Docker Compose v2（`docker compose`）
 - Linux 宿主机；Nginx stack 需要占用 80/443 端口
 - 为 `docker/nginx/conf.d/*.conf` 中的站点准备域名和 TLS 证书
-- 使用 MySQL / Redis / Elasticsearch 时需要启动 data stack；Termix 默认使用 SQLite，可独立启动
+- 使用 MySQL / Redis / Elasticsearch 时需要启动 data stack；Termix 默认使用 SQLite，可独立启动；new-api 通过 `NEWAPI_SQL_DSN` 使用 MySQL，并通过 `NEWAPI_REDIS_CONN_STRING` 使用 Redis
 
 ## 快速开始
 
@@ -37,9 +39,10 @@ cp nginx/conf.d/termix.conf.sample  nginx/conf.d/termix.conf
 # 创建 Nginx 容器挂载的宿主机目录
 mkdir -p nginx/site/xcloud nginx/upload nginx/ssl
 
-# 按顺序启动三套 stack
+# 按顺序启动四套 stack
 docker compose -f docker-compose-data.yml up -d
 docker compose -f docker-compose-termix.yml up -d
+docker compose -f docker-compose-ai.yml up -d
 docker compose -f docker-compose-web.yml up -d
 ```
 
@@ -47,15 +50,16 @@ docker compose -f docker-compose-web.yml up -d
 
 证书按 `nginx/ssl/<domain>/` 放置，文件名为 `fullchain.pem`、`privkey.pem`、`chain.pem`，与站点配置中的路径一致。
 
-## 三套 Stack
+## 四套 Stack
 
 | Compose 文件 | 服务 | 宿主机端口 | 说明 |
 |---|---|---|---|
 | `docker-compose-data.yml` | `x-mysql`、`x-redis`、`x-es` | 6306、6379、6200/6201 | MySQL、Redis、Elasticsearch |
 | `docker-compose-termix.yml` | `x-termix`、`x-guacd` | 9980、9922 | 默认 SQLite，MySQL 可选 |
+| `docker-compose-ai.yml` | `x-new-api` | 9960 | new-api，通过 data stack 使用 MySQL 和 Redis |
 | `docker-compose-web.yml` | `x-nginx` | 80、443 | 反向代理、WAF、限流 |
 
-三套 stack 不共享 Docker 网络。Nginx stack 通过 `host.docker.internal` 访问宿主机上的服务：应用后端 `:8080`，Termix `:9980`；Termix 启用 MySQL 时访问 `host.docker.internal:6306`。
+四套 stack 不共享 Docker 网络。Nginx stack 通过 `host.docker.internal` 访问宿主机上的服务：应用后端 `:8080`，Termix `:9980`；Termix 启用 MySQL 时和 new-api 都访问 `host.docker.internal:6306`，new-api 还访问 Redis `host.docker.internal:6379`。
 
 ## 配置
 
@@ -72,6 +76,11 @@ docker compose -f docker-compose-web.yml up -d
 | `LOG_MAX_SIZE`、`LOG_MAX_FILE` | 容器日志轮转 |
 | `DOCKER_VOLUME_DIRECTORY` | 绑定挂载的基础路径，默认为当前目录 |
 | `TERMIX_DB_DIALECT`、`TERMIX_DB_URL`、`TERMIX_DB_POOL_MAX` | 可选的 Termix MySQL 连接 |
+| `NEWAPI_SQL_DSN` | new-api 的 MySQL 连接（必填，Go DSN，凭据不要 URL 编码） |
+| `NEWAPI_SESSION_SECRET` | new-api 的持久化会话密钥（必填） |
+| `NEWAPI_REDIS_CONN_STRING` | new-api 的 Redis 连接（必填，密码需 URL 编码） |
+| `NEWAPI_SESSION_COOKIE_SECURE` | 可选，new-api 的 Secure refresh cookie 开关（默认 `false`） |
+| `NEWAPI_SESSION_COOKIE_TRUSTED_URL` | new-api 站点的精确 HTTPS Origin，`SESSION_COOKIE_SECURE=true` 时必填 |
 
 compose 文件中的密码默认值仅用于本地启动，生产必须在 `docker/.env` 或外部 secret 中覆盖。
 
@@ -81,6 +90,7 @@ compose 文件中的密码默认值仅用于本地启动，生产必须在 `dock
 - `docker/nginx/Readme.md` — Nginx 配置分层、站点模板、WAF 与限流
 - `docker/mysql/Readme.md`、`docker/redis/Readme.md`、`docker/es/Readme.md` — 数据服务配置
 - `docker/termix/Readme.md` — SQLite 默认模式与可选 MySQL 配置
+- `docker/new-api/Readme.md` — new-api 的 MySQL / Redis 配置与数据目录
 - `CLAUDE.md` — 架构与维护说明
 
 ## 许可证
