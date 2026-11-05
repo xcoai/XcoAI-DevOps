@@ -80,8 +80,8 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
 - **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
 - **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。Elasticsearch 8.x 不允许 root 启动，容器使用镜像内置 `elasticsearch` 用户（`user: "1000:0"`）；部署机需预授权数据目录属主：`chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data`。JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`）。
-- **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP，外部访问由防火墙限制）。
-- **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。默认使用 SQLite，无需额外配置即可启动；启用 MySQL 时在 `docker/.env` 设置 `TERMIX_DB_DIALECT=mysql`、`TERMIX_DB_URL=mysql://termix:<url-encoded-password>@host.docker.internal:6306/termix_data?ssl=false`（URL 中密码需 URL 编码；`ssl=false` 显式关闭 TLS）、`TERMIX_DB_POOL_MAX=10`，compose 映射为 `DATABASE_*`，并通过 `extra_hosts: host-gateway` 跨 stack 访问；需先启动 data stack 并预先创建 `termix_data` 库/用户。`/app/data` 卷在两种模式下都保留（密钥、插件、上传文件），MySQL 模式备份需同时覆盖 `termix_data` 库和该目录。端口与挂载兼容性待服务器验证。
+- **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP）。
+- **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。默认使用 SQLite，无需额外配置即可启动；启用 MySQL 时在 `docker/.env` 设置 `TERMIX_DB_DIALECT=mysql`、`TERMIX_DB_URL=mysql://termix:<url-encoded-password>@host.docker.internal:6306/termix_data?ssl=false`（URL 中密码需 URL 编码；`ssl=false` 显式关闭 TLS）、`TERMIX_DB_POOL_MAX=10`，compose 映射为 `DATABASE_*`，并通过 `extra_hosts: host-gateway` 跨 stack 访问；需先启动 data stack 并预先创建 `termix_data` 库/用户。`/app/data` 卷在两种模式下都保留（密钥、插件、上传文件），MySQL 模式备份需同时覆盖 `termix_data` 库和该目录。
 
 ## 约定
 
@@ -101,7 +101,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ## 已知风险（发现即可，未经用户确认不要顺手改）
 
 - `docker-compose-data.yml` 的 MySQL root 密码通过 `${MYSQL_ROOT_PASSWORD:-XcoAI#888}` 读取，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖，禁止提交 `.env`。
-- Redis 认证：`docker-compose-data.yml` 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖。6379 仍发布到宿主机所有网卡，需由外部防火墙限制来源。
+- Redis 认证：`docker-compose-data.yml` 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动；生产必须在 `docker/.env`（已 gitignore）或 secret 中覆盖。
 - Termix 默认 SQLite；启用 MySQL 时需在 `docker/.env` 配置 `TERMIX_DB_DIALECT`/`TERMIX_DB_URL`/`TERMIX_DB_POOL_MAX`，并预先在 MySQL 创建 `termix_data` 库/用户。`TERMIX_DB_URL` 含密码（需 URL 编码）并使用 `ssl=false` 明文连接；仅限内网，跨不可信网络须启用 TLS。`.env` 已 gitignore，禁止提交或输出。
 - 跨域默认拒绝：`conf_map` 只声明 `$cors_origin` 为空，不在共享文件中写死域名。需跨域的站点要在自己 `.conf` 的 server 内用 `if ($http_origin ~* "^https://...$") { set $cors_origin $http_origin; }` 配置白名单；未配置时不下发 `Access-Control-Allow-Origin`。
 - `conf_xss-sql` 旧规则已移除，由 `waf_maps` / `waf_server` / `waf_server_lite` / `waf_exempt` 取代；`bak/` 下是历史备份，已被 gitignore。

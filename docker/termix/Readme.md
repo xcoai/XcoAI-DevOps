@@ -1,5 +1,11 @@
 # Termix
 
+## 服务与端口
+
+- `x-termix`：`9980` → `8080`，数据目录 `termix/data` → `/app/data`
+- `x-guacd`：`9922` → `4822`，Termix 容器内通过服务名 `x-guacd:4822` 访问
+- 网络：`net-termix`
+
 默认使用 SQLite，无需额外配置，直接启动 termix stack 即可：
 
 ```bash
