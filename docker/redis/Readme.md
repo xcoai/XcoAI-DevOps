@@ -7,6 +7,12 @@
 - 配置：`redis/redis.conf` → `/etc/redis.conf`
 - 网络：`net-data`
 
+## 逻辑库分配
+
+- `redis.conf` 设置 `databases 256`，有效编号 `0–255`。
+- `90`：new-api 专用，见 `new-api/Readme.md` 的 `NEWAPI_REDIS_CONN_STRING`。
+- `0–89`、`91–255`：预留；新增应用分配编号后在此登记，避免多个应用使用同一个默认 `/0`。
+
 ## 启动参数
 
 compose 以 `redis-server /etc/redis.conf --requirepass "$REDIS_PASSWORD" --maxmemory "$REDIS_MAXMEMORY"` 启动，密码和 `maxmemory` 以环境变量为准；`redis.conf` 中的 `maxmemory 512mb` 是直接启动时的默认值。

@@ -81,7 +81,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 ### 数据层
 
 - **MySQL 8.4.13**：`mysql/my.cnf` 整体覆盖 `/etc/mysql/my.cnf`，官方镜像的 `conf.d` 扩展点因此失效；`lower_case_table_names=1` 只在全新初始化时生效，已有数据目录不可回退。数据在 `mysql/data/`。
-- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
+- **Redis 8.8.4**：挂载 `redis/redis.conf` 并以该文件启动；compose 通过 `${REDIS_PASSWORD:-XcoAI#888}` 注入 `--requirepass`，默认值仅用于本地启动，生产必须在 `docker/.env` 或 secret 中覆盖；`protected-mode yes`；`databases 256`（有效编号 0–255），其中 `90` 固定给 new-api，`0–89`、`91–255` 预留。RDB 持久化到 `/data`，`maxmemory` 由 `REDIS_MAXMEMORY` 注入（默认 512mb）/`noeviction`；`used_memory` 是运行时指标，用 `INFO memory` 监控；容器上限 `REDIS_MEM_LIMIT` 默认 768m，应高于 maxmemory；AOF 默认关闭，避免已有 RDB 切换时丢数据；I/O 多线程默认不启用，按 CPU/压测结果调整。
 - **Elasticsearch 8.19.23**：数据卷挂到 `/usr/share/elasticsearch/data`（官方镜像默认数据目录）。因 9.x 存在 CVE-2026-51302 等漏洞，暂使用已修复的 8.19.x；当前数据目录为空，9.x 数据目录无法被 8.x 直接打开。Elasticsearch 8.x 不允许 root 启动，容器使用镜像内置 `elasticsearch` 用户（`user: "1000:0"`）；部署机需预授权数据目录属主：`chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data`。JVM 堆由 `JAVA_XMS`/`JAVA_XMX` 注入（默认 512m，应低于 `ELASTIC_MEM_LIMIT`）。
 - **Elasticsearch 安全**：`discovery.type=single-node`；`ELASTIC_PASSWORD` 从 `docker/.env` 读取，默认值仅用于本地启动；x-pack security 已启用，但按要求关闭 HTTP/transport TLS（内网明文 HTTP）。
 - **Termix**（`termixssh/termix:26.10.6`，按官网安装文档更新）是 Web 终端前端，`guacd 1.6.0` 提供 RDP/VNC 网关，termix 通过服务名 `x-guacd:4822` 访问 guacd。默认使用 SQLite，无需额外配置即可启动；启用 MySQL 时在 `docker/.env` 设置 `TERMIX_DB_DIALECT=mysql`、`TERMIX_DB_URL=mysql://termix:<url-encoded-password>@host.docker.internal:6306/termix_data?ssl=false`（URL 中密码需 URL 编码；`ssl=false` 显式关闭 TLS）、`TERMIX_DB_POOL_MAX=10`，compose 映射为 `DATABASE_*`，并通过 `extra_hosts: host-gateway` 跨 stack 访问；需先启动 data stack 并预先创建 `termix_data` 库/用户。`/app/data` 卷在两种模式下都保留（密钥、插件、上传文件），MySQL 模式备份需同时覆盖 `termix_data` 库和该目录。
@@ -91,7 +91,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - **New API**（`calciumion/new-api:v1.0.0-rc.48`）是 AI 网关，独立 `net-ai` stack；容器 `x-new-api`，宿主机 `9960` → 容器 `3000`，数据与日志分别挂载到 `new-api/data`、`new-api/logs`，启动参数为 `--log-dir /app/logs`。
 - MySQL 必填：`docker/.env` 的 `NEWAPI_SQL_DSN` 使用 Go DSN（如 `user:password@tcp(host.docker.internal:6306)/dbname?charset=utf8mb4&parseTime=True&loc=Local`），compose 映射为 `SQL_DSN`；凭据不要 URL 编码，需先启动 data stack 并预建库/用户。
 - `NEWAPI_SESSION_SECRET` 必填，compose 映射为 `SESSION_SECRET`，使用 `openssl rand -hex 32` 生成固定随机值；未配置时 compose 拒绝启动。
-- Redis 必填：`NEWAPI_REDIS_CONN_STRING` 映射为 `REDIS_CONN_STRING`，复用 data stack 的 `x-redis`（`host.docker.internal:6379`）；URL 中密码需 URL 编码，修改 `REDIS_PASSWORD` 后需同步更新。
+- Redis 必填：`NEWAPI_REDIS_CONN_STRING` 映射为 `REDIS_CONN_STRING`，复用 data stack 的 `x-redis`（`host.docker.internal:6379`），路径固定使用 `/90` 号逻辑库（new-api 专用，避免与默认 `/0` 冲突）；URL 中密码需 URL 编码，修改 `REDIS_PASSWORD` 后需同步更新。
 - 会话 Cookie 加固（可选）：`SESSION_COOKIE_SECURE` 由 `NEWAPI_SESSION_COOKIE_SECURE` 注入，默认 `false`；设为 `true` 时必须同时设置 `NEWAPI_SESSION_COOKIE_TRUSTED_URL`（映射 `SESSION_COOKIE_TRUSTED_URL`），值为用户实际访问的精确 HTTPS Origin（如 `https://api.example.com`，多个用逗号分隔，不支持路径/通配符）。new-api 在 `SECURE=true` 但缺少该值时启动即退出（`common/init.go` 调用 `InitSessionCookieSettings` 后 `log.Fatal`）；`SECURE=false` 却设置 trusted URL 也会启动失败。纯 HTTP 直连 `:9960` 时 refresh/logout 会被 OriginGuard 拒绝。
 
 ## 约定

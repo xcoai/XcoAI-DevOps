@@ -21,7 +21,8 @@ services:
       SQL_DSN: "${NEWAPI_SQL_DSN:?NEWAPI_SQL_DSN must be set in docker/.env}"
       # 必填：持久化会话密钥，使用 openssl rand -hex 32 生成
       SESSION_SECRET: "${NEWAPI_SESSION_SECRET:?NEWAPI_SESSION_SECRET must be set in docker/.env}"
-      # 必填：复用 data stack 的 x-redis；密码需 URL 编码，例如 redis://:<url-encoded-password>@host.docker.internal:6379/0
+      # 必填：复用 data stack 的 x-redis；90 号为 new-api 专用库，密码需 URL 编码
+      # 例如 redis://:<url-encoded-password>@host.docker.internal:6379/90
       REDIS_CONN_STRING: "${NEWAPI_REDIS_CONN_STRING:?NEWAPI_REDIS_CONN_STRING must be set in docker/.env}"
       # 可选：SESSION_COOKIE_SECURE 默认 false；设为 true 时必须同时给出精确的 HTTPS Origin，否则 new-api 启动失败
       SESSION_COOKIE_SECURE: "${NEWAPI_SESSION_COOKIE_SECURE:-false}"
