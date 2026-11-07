@@ -27,6 +27,7 @@ docker compose -f <file>.yml down                           # 停止（旧版命
 ```bash
 cp docker/nginx/conf.d/default.conf.sample docker/nginx/conf.d/default.conf   # 需编辑修改具体访问域名和反向代理路径等
 cp docker/nginx/conf.d/termix.conf.sample  docker/nginx/conf.d/termix.conf    # 需编辑修改具体访问域名和反向代理路径等
+cp docker/nginx/conf.d/router.conf.sample  docker/nginx/conf.d/router.conf    # 部署 new-api 时使用
 # 可选：需要部署级自定义头/代理参数时，再复制并取消站点内的 include 注释
 # cp docker/nginx/conf.d/conf_custom_header.sample docker/nginx/conf.d/conf_custom_header
 ```
@@ -55,7 +56,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 | `docker-compose-ai.yml` | `x-new-api`（9960→3000） | `net-ai` |
 | `docker-compose-web.yml` | `x-nginx`（80/443） | `net-web` |
 
-**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。termix 默认使用 SQLite，无需 data stack；启用 MySQL 时通过同一方式访问 `host.docker.internal:6306/termix_data`，需先启动 data stack。new-api 使用 MySQL 和 Redis，分别通过 `host.docker.internal:6306`、`host.docker.internal:6379` 访问，连接串由 `NEWAPI_SQL_DSN` / `NEWAPI_REDIS_CONN_STRING` 注入，同样需先启动 data stack。
+**stack 之间不共享 Docker 网络**。Nginx 反代走宿主机网关：`docker-compose-web.yml` 用 `extra_hosts: host-gateway` 注入 `host.docker.internal`（需 Docker 20.10+ / Compose v2），站点模板统一写 `http://host.docker.internal:<port>`，不写死 `172.17.0.1`。业务后端约定宿主机 `:8080`，termix 模板代理到 `:9980`，router 模板代理到 new-api `:9960`。因此后端进程跑在宿主机上，而不是容器里，容器间不会用服务名互访。termix 默认使用 SQLite，无需 data stack；启用 MySQL 时通过同一方式访问 `host.docker.internal:6306/termix_data`，需先启动 data stack。new-api 使用 MySQL 和 Redis，分别通过 `host.docker.internal:6306`、`host.docker.internal:6379` 访问，连接串由 `NEWAPI_SQL_DSN` / `NEWAPI_REDIS_CONN_STRING` 注入，同样需先启动 data stack。
 
 ### nginx 配置分层（改配置前必读）
 
@@ -72,7 +73,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 
 - **无 `.conf` 后缀的文件是片段，只能被显式 include**；只有站点 server 块放 `.conf`，才会被通配加载。新增片段要同步改 `nginx.conf` 的 include 列表。
 - 部署级自定义（可选）：`conf_custom_header`（由 `.sample` 复制，已 gitignore，站点默认不 include）在需要时由站点 server 或代理 location 显式 include；内部 include `conf_header` / `conf_hide_header`，用 `set` 覆盖 `$hdr_*` / `$cors_*` / `$proxy_hdr_*` 变量，或追加 `add_header` / `proxy_*` 参数。同名 `add_header` / `proxy_set_header` 是追加不是替换，覆盖必须走变量；location 内自定义 `add_header` 时必须 include 本文件，否则会丢公共响应头。未启用时基础配置可直接通过 `nginx -t` 运行。
-- `.sample` 是模板，仓库不保存线上站点配置；`default.conf.sample` 绑定 `www.xxx.net`，`termix.conf.sample` 绑定 `remote.xcoai.net`。
+- `.sample` 是模板，仓库不保存线上站点配置；`default.conf.sample` 绑定 `www.xxx.net`，`termix.conf.sample` 绑定 `remote.xcoai.net`，`router.conf.sample` 绑定 `router.xcoai.net`。
 - WAF 分两段：`waf_maps` 只打标，`waf_server` 在 server 级执行拦截（命中→403、非法方法→405）并把规则命中、非法方法、恶意 Referer 写入 `waf.log`；日志含 `$host`、`$status` 与各规则分项。`$waf_action` 的 `"block"` 改成 `"pass"` 即整站切观察模式；`waf_exempt` 仅豁免 `$query_string` 上的 SQLi/XSS，UA/路径规则仍生效。SQLi/XSS 只匹配未解码的 `$query_string`，路径规则使用 `$uri`（已解码/规范化）。WAF 只覆盖常见特征，不追求规则全覆盖；十六进制编码等未识别形式由应用层参数化查询兜底（文件头注释已说明，改规则前先读）。管理类站点（termix）改用 `waf_server_lite`：仅拦截 UA/Referer/非法方法，URI/SQLi/XSS 规则只记录不拦截，避免文件路径参数（`/etc/passwd`、`../`）被误伤。
 - 限流：location 内的 `limit_req` 会**替换**而非叠加 server 级的 zone，只能按路径分档（`req_site` / `req_api` / `req_auth`）。
 - 静态内容：`site/`（如 `site/xcloud` 为站点根）、`upload/`（下载类后缀强制 `Content-Disposition: attachment`，其余长缓存）、证书按域名放 `ssl/<domain>/`。这三个目录不入库，由部署机提供。
@@ -92,7 +93,8 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - MySQL 必填：`docker/.env` 的 `NEWAPI_SQL_DSN` 使用 Go DSN（如 `user:password@tcp(host.docker.internal:6306)/dbname?charset=utf8mb4&parseTime=True&loc=Local`），compose 映射为 `SQL_DSN`；凭据不要 URL 编码，需先启动 data stack 并预建库/用户。
 - `NEWAPI_SESSION_SECRET` 必填，compose 映射为 `SESSION_SECRET`，使用 `openssl rand -hex 32` 生成固定随机值；未配置时 compose 拒绝启动。
 - Redis 必填：`NEWAPI_REDIS_CONN_STRING` 映射为 `REDIS_CONN_STRING`，复用 data stack 的 `x-redis`（`host.docker.internal:6379`），路径固定使用 `/90` 号逻辑库（new-api 专用，避免与默认 `/0` 冲突）；URL 中密码需 URL 编码，修改 `REDIS_PASSWORD` 后需同步更新。
-- 会话 Cookie 加固（可选）：`SESSION_COOKIE_SECURE` 由 `NEWAPI_SESSION_COOKIE_SECURE` 注入，默认 `false`；设为 `true` 时必须同时设置 `NEWAPI_SESSION_COOKIE_TRUSTED_URL`（映射 `SESSION_COOKIE_TRUSTED_URL`），值为用户实际访问的精确 HTTPS Origin（如 `https://api.example.com`，多个用逗号分隔，不支持路径/通配符）。new-api 在 `SECURE=true` 但缺少该值时启动即退出（`common/init.go` 调用 `InitSessionCookieSettings` 后 `log.Fatal`）；`SECURE=false` 却设置 trusted URL 也会启动失败。纯 HTTP 直连 `:9960` 时 refresh/logout 会被 OriginGuard 拒绝。
+- Nginx 反代：部署 new-api 时复制 `nginx/conf.d/router.conf.sample` 为 `router.conf`；模板绑定 `router.xcoai.net`，代理 `host.docker.internal:9960`，使用 `waf_server`，API 路径使用 `req_api` 限流。
+- 会话 Cookie 加固（可选）：`SESSION_COOKIE_SECURE` 由 `NEWAPI_SESSION_COOKIE_SECURE` 注入，默认 `false`；设为 `true` 时必须同时设置 `NEWAPI_SESSION_COOKIE_TRUSTED_URL`（映射 `SESSION_COOKIE_TRUSTED_URL`），值为用户实际访问的精确 HTTPS Origin（如 `https://router.xcoai.net`，多个用逗号分隔，不支持路径/通配符）。new-api 在 `SECURE=true` 但缺少该值时启动即退出（`common/init.go` 调用 `InitSessionCookieSettings` 后 `log.Fatal`）；`SECURE=false` 却设置 trusted URL 也会启动失败。纯 HTTP 直连 `:9960` 时 refresh/logout 会被 OriginGuard 拒绝。
 
 ## 约定
 

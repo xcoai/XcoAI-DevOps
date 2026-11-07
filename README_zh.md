@@ -35,6 +35,7 @@ cd docker
 # 首次启动：复制站点模板，并按实际域名、上游和证书路径修改
 cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
 cp nginx/conf.d/termix.conf.sample  nginx/conf.d/termix.conf
+cp nginx/conf.d/router.conf.sample  nginx/conf.d/router.conf
 
 # 创建 Nginx 容器挂载的宿主机目录
 mkdir -p nginx/site/xcloud nginx/upload nginx/ssl
@@ -59,7 +60,7 @@ docker compose -f docker-compose-web.yml up -d
 | `docker-compose-ai.yml` | `x-new-api` | 9960 | new-api，通过 data stack 使用 MySQL 和 Redis |
 | `docker-compose-web.yml` | `x-nginx` | 80、443 | 反向代理、WAF、限流 |
 
-四套 stack 不共享 Docker 网络。Nginx stack 通过 `host.docker.internal` 访问宿主机上的服务：应用后端 `:8080`，Termix `:9980`；Termix 启用 MySQL 时和 new-api 都访问 `host.docker.internal:6306`，new-api 还访问 Redis `host.docker.internal:6379`。
+四套 stack 不共享 Docker 网络。Nginx stack 通过 `host.docker.internal` 访问宿主机上的服务：应用后端 `:8080`，Termix `:9980`，new-api `:9960`；Termix 启用 MySQL 时和 new-api 都访问 `host.docker.internal:6306`，new-api 还访问 Redis `host.docker.internal:6379`。
 
 ## 配置
 

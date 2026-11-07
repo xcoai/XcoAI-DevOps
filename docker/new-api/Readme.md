@@ -26,7 +26,7 @@ NEWAPI_REDIS_CONN_STRING=redis://:<url-encoded-password>@host.docker.internal:63
 
 # 可选（生产经 Nginx HTTPS 部署时建议启用）：两者需同时设置
 NEWAPI_SESSION_COOKIE_SECURE=true
-NEWAPI_SESSION_COOKIE_TRUSTED_URL=https://api.example.com
+NEWAPI_SESSION_COOKIE_TRUSTED_URL=https://router.xcoai.net
 ```
 
 - `NEWAPI_SQL_DSN`：指向 `x-mysql` 的宿主机端口 `6306`；Go DSN 凭据部分不要做 URL 编码，`#` 等特殊字符按原样填写，必要时给 `.env` 中的值加单引号。
@@ -64,6 +64,18 @@ FLUSH PRIVILEGES;
 docker compose -f docker-compose-data.yml up -d
 docker compose -f docker-compose-ai.yml up -d
 ```
+
+## Nginx 反代
+
+仓库提供 `nginx/conf.d/router.conf.sample`，部署 new-api 时复制为站点配置：
+
+```bash
+cp nginx/conf.d/router.conf.sample nginx/conf.d/router.conf
+```
+
+- 模板绑定 `router.xcoai.net`，反代宿主机 `:9960`，使用 `waf_server`。
+- 启用 `NEWAPI_SESSION_COOKIE_SECURE=true` 时，`NEWAPI_SESSION_COOKIE_TRUSTED_URL` 必须与模板 `server_name` 的 HTTPS Origin 一致，例如 `https://router.xcoai.net`。
+- 修改域名或证书路径后，先执行 `docker exec x-nginx nginx -t`，再执行 `nginx -s reload`。
 
 ## 数据与备份
 

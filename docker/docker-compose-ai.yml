@@ -1,7 +1,7 @@
 # new-api 独立 stack：应用数据存 MySQL、缓存用 Redis，复用 data stack 的 x-mysql / x-redis。
 # 启动前在 docker/.env 配置 NEWAPI_SQL_DSN、NEWAPI_SESSION_SECRET、NEWAPI_REDIS_CONN_STRING（必填）并先启动 data stack；
 # 生产经 Nginx HTTPS 部署时，再同时设置 NEWAPI_SESSION_COOKIE_SECURE=true 和 NEWAPI_SESSION_COOKIE_TRUSTED_URL。
-# 宿主机端口 9960 → 容器 3000；Nginx 反代按站点模板另行配置。
+# 宿主机端口 9960 → 容器 3000；Nginx 反代复制 nginx/conf.d/router.conf.sample 为 router.conf 后按实际域名/证书调整。
 services:
   x-new-api:
     container_name: x-new-api

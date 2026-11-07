@@ -35,6 +35,7 @@ cd docker
 # First run: create site configs and edit domains, upstreams, and certificate paths
 cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
 cp nginx/conf.d/termix.conf.sample  nginx/conf.d/termix.conf
+cp nginx/conf.d/router.conf.sample  nginx/conf.d/router.conf
 
 # Create the host directories mounted by the Nginx container
 mkdir -p nginx/site/xcloud nginx/upload nginx/ssl
@@ -59,7 +60,7 @@ Certificates go under `nginx/ssl/<domain>/` as `fullchain.pem`, `privkey.pem`, a
 | `docker-compose-ai.yml` | `x-new-api` | 9960 | new-api; MySQL and Redis via data stack |
 | `docker-compose-web.yml` | `x-nginx` | 80, 443 | Reverse proxy, WAF, rate limiting |
 
-The stacks do not share Docker networks. The Nginx stack uses `host.docker.internal` to reach services running on the host: application backends on `:8080` and Termix on `:9980`. The Termix MySQL option and new-api reach MySQL at `host.docker.internal:6306`; new-api reaches Redis at `host.docker.internal:6379`.
+The stacks do not share Docker networks. The Nginx stack uses `host.docker.internal` to reach services running on the host: application backends on `:8080`, Termix on `:9980`, and new-api on `:9960`. The Termix MySQL option and new-api reach MySQL at `host.docker.internal:6306`; new-api reaches Redis at `host.docker.internal:6379`.
 
 ## Configuration
 

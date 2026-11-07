@@ -12,7 +12,7 @@
   - `nginx/upload/` → `/usr/share/nginx/upload/`（只读）
   - `nginx/logs/` → `/var/log/nginx/`
 
-Nginx 通过 `host.docker.internal` 访问宿主机上的后端 `:8080` 和 Termix `:9980`；该地址由 compose 的 `extra_hosts` 注入。
+Nginx 通过 `host.docker.internal` 访问宿主机上的后端 `:8080`、Termix `:9980` 和 new-api `:9960`；该地址由 compose 的 `extra_hosts` 注入。
 
 ## 配置分层
 
@@ -34,10 +34,12 @@ Nginx 通过 `host.docker.internal` 访问宿主机上的后端 `:8080` 和 Term
 ```bash
 cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
 cp nginx/conf.d/termix.conf.sample  nginx/conf.d/termix.conf
+cp nginx/conf.d/router.conf.sample  nginx/conf.d/router.conf
 ```
 
 - `default.conf.sample`：示例站点，绑定 `www.xxx.net`，静态根为 `site/xcloud`，API 反代宿主机 `:8080`。
 - `termix.conf.sample`：绑定 `remote.xcoai.net`，反代 Termix `:9980`，使用 `waf_server_lite`。
+- `router.conf.sample`：部署 new-api 时使用，绑定 `router.xcoai.net`，反代 new-api `:9960`，使用 `waf_server`；API 路径使用 `req_api` 限流。
 - 修改域名、证书路径、证书目录和上游后再启动。
 - `conf_custom_header.sample` 为可选的部署级自定义层；需要覆盖默认响应头/代理头时复制为 `conf_custom_header`，并取消站点内的 include 注释。
 

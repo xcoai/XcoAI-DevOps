@@ -10,6 +10,7 @@
    ```bash
    cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
    cp nginx/conf.d/termix.conf.sample  nginx/conf.d/termix.conf
+   cp nginx/conf.d/router.conf.sample  nginx/conf.d/router.conf
    ```
 
 3. 准备 nginx 挂载目录（均不入库）：
@@ -57,4 +58,4 @@ docker logs --tail=100 x-new-api                         # new-api 启动 / SQL_
 ```
 
 - Nginx 配置为只读挂载，修改后先执行 `nginx -t`，再执行 `nginx -s reload`，无需重启容器。
-- Nginx 通过 `host.docker.internal` 访问宿主机后端 `:8080` 和 Termix `:9980`；该地址由 compose 的 `extra_hosts` 注入。
+- Nginx 通过 `host.docker.internal` 访问宿主机后端 `:8080`、Termix `:9980` 和 new-api `:9960`；该地址由 compose 的 `extra_hosts` 注入。
