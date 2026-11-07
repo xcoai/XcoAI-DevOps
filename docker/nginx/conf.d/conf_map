@@ -98,16 +98,16 @@ map $request_filename $download_attachment {
     "~*\.(txt|pdf|rar|gz|zip|exe|sh|doc|docx|xls|xlsx|ppt|pptx)$" attachment;
 }
 map $request_filename $download_cache_control {
-    default "public, max-age=5184000, immutable";
+    default "public, max-age=2592000, immutable";
     "~*\.(htm|html)$" "no-store";
 }
-#map $request_uri $has_query {
-#    default 0;
-#    "~*\?" 1;
-#}
-#map $http_user_agent $client_user_agent {
-#    # 有非空字符 → 保留原值
-#    # ~\S+   $http_user_agent;
-#    # 空或纯空格 → 使用默认值
-#    default "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
-#}
+map $request_uri $has_query {
+    default 0;
+    "~*\?" 1;
+}
+map $http_user_agent $client_user_agent {
+    # 统一覆盖 UA：所有请求都使用以下默认值
+    # 如需保留非空原值、仅空或纯空格时兜底，取消下一行注释
+    # ~\S+   $http_user_agent;
+    default "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36";
+}

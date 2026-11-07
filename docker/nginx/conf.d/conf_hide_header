@@ -3,6 +3,7 @@ proxy_hide_header           Access-Control-Allow-Methods;
 proxy_hide_header           Access-Control-Allow-Headers;
 proxy_hide_header           Access-Control-Allow-Credentials;
 proxy_hide_header           Access-Control-Allow-Private-Network;
+proxy_hide_header           Access-Control-Max-Age;
 proxy_hide_header           Content-Security-Policy;
 proxy_hide_header           X-Frame-Options;
 proxy_hide_header           X-Content-Type-Options;

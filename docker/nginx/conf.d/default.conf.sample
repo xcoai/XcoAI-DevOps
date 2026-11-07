@@ -14,6 +14,10 @@ server {
     include                    /etc/nginx/conf.d/waf_server;
     # 部署级自定义响应头/代理参数；由 conf_custom_header.sample 复制而来
     # include                    /etc/nginx/conf.d/conf_custom_header;
+    # 修改后端返回的cookie数据，适用于需要跨域支持时启用
+    # proxy_cookie_flags         ~ secure httponly samesite=none;
+    # 配置特定UA，适用于反向代理某些后端服务时，某些特定授权要求
+    # proxy_set_header User-Agent $client_user_agent;
 
     limit_req                  zone=req_site burst=60 nodelay;
     limit_conn                 conn_perip 50;

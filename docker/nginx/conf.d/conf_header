@@ -12,6 +12,7 @@ add_header          Access-Control-Allow-Methods $cors_methods always;
 add_header          Access-Control-Allow-Headers $cors_headers always;
 add_header          Access-Control-Allow-Credentials $cors_credentials always;
 add_header          Access-Control-Allow-Private-Network $cors_private_network always;
+add_header          Access-Control-Max-Age 86400 always;
 add_header          Content-Security-Policy $hdr_csp always;
 add_header          X-Frame-Options $hdr_xfo always;
 add_header          X-Content-Type-Options $hdr_xcto always;

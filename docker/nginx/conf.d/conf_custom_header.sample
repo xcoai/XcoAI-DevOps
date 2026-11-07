@@ -38,7 +38,7 @@ include /etc/nginx/conf.d/conf_hide_header;
 # set $hdr_vary "Origin";
 # set $cors_origin "";
 # set $cors_methods "GET,POST,PUT,DELETE,OPTIONS";
-# set $cors_headers "Content-Type,Authorization";
+# set $cors_headers "Content-Type,Authorization,X-Requested-With";
 # set $cors_credentials "false";
 # set $cors_private_network "";
 # set $hdr_csp "default-src 'self' https:; script-src 'self' https:; style-src 'self' https:; img-src 'self' data: https:; frame-ancestors 'self';";
