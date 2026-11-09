@@ -37,7 +37,7 @@ include /etc/nginx/conf.d/conf_hide_header;
 # 不要在这里无条件 set $cors_origin $http_origin，否则等于放开任意跨域。
 # set $hdr_vary "Origin";
 # set $cors_origin "";
-# set $cors_methods "GET,POST,PUT,DELETE,OPTIONS";
+# set $cors_methods "GET,POST,PUT,DELETE,OPTIONS,PATCH";
 # set $cors_headers "Content-Type,Authorization,X-Requested-With";
 # set $cors_credentials "false";
 # set $cors_private_network "";

@@ -118,6 +118,7 @@ map $request_method $waf_method_bad {
     POST    0;
     HEAD    0;
     PUT     0;
+    PATCH   0;
     DELETE  0;
     OPTIONS 0;
 }

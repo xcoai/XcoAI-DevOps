@@ -15,7 +15,7 @@ if ($waf_referer_bad = 1) {
     return 403;
 }
 
-# HTTP 方法限制（按业务调整，PATCH默认移除支持，PUT/DELETE后续也要减少使用）
+# HTTP 方法限制（按业务调整；PATCH 供 new-api 模型定价等接口使用，PUT/DELETE 后续也要减少使用）
 if ($waf_method_bad = 1) {
     return 405;
 }

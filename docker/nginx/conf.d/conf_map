@@ -27,7 +27,7 @@ map $host $hdr_vary {
     default "Origin";
 }
 map $host $cors_methods {
-    default "GET,POST,PUT,DELETE,OPTIONS";
+    default "GET,POST,PUT,DELETE,OPTIONS,PATCH";
 }
 map $host $cors_headers {
     default "$http_access_control_request_headers";
