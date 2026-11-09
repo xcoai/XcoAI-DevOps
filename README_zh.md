@@ -83,7 +83,7 @@ docker compose -f docker-compose-web.yml up -d
 | `NEWAPI_SESSION_COOKIE_SECURE` | 可选，new-api 的 Secure refresh cookie 开关（默认 `false`） |
 | `NEWAPI_SESSION_COOKIE_TRUSTED_URL` | new-api 站点的精确 HTTPS Origin，`SESSION_COOKIE_SECURE=true` 时必填 |
 
-compose 文件中的密码默认值仅用于本地启动，生产必须在 `docker/.env` 或外部 secret 中覆盖。
+上述密码变量均为必填，未在 `docker/.env` 或外部 secret 中设置时 compose 拒绝启动。
 
 ## 文档
 

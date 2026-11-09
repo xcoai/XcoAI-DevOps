@@ -83,7 +83,7 @@ Runtime configuration belongs in `docker/.env`, which is gitignored. Do not comm
 | `NEWAPI_SESSION_COOKIE_SECURE` | Optional; Secure refresh cookie flag for new-api (default `false`) |
 | `NEWAPI_SESSION_COOKIE_TRUSTED_URL` | Exact HTTPS origin of the new-api site; required when cookie secure is `true` |
 
-The fallback passwords in the compose files are for local startup only. Override them in `docker/.env` or an external secret store.
+The password variables are required; compose refuses to start when any is missing. Set them in `docker/.env` or an external secret store.
 
 ## Documentation
 

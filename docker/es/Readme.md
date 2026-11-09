@@ -19,7 +19,7 @@ chown -R 1000:0 <DOCKER_VOLUME_DIRECTORY>/es/data
 ## 配置
 
 - `discovery.type=single-node`。
-- x-pack security 启用；`ELASTIC_PASSWORD` 来自 `docker/.env`，默认值仅用于本地启动。
+- x-pack security 启用；`ELASTIC_PASSWORD` 为必填，从 `docker/.env` 读取，未设置时 compose 拒绝启动。
 - HTTP 与 transport TLS 均关闭，适用于受控网络；跨不可信网络部署前需另行启用 TLS。
 - JVM 堆由 `JAVA_XMS` / `JAVA_XMX` 控制，默认 `512m`；堆应低于容器上限 `ELASTIC_MEM_LIMIT`（默认 `1g`），给堆外内存留余量。
 - 健康检查通过 `http://localhost:9200/_cluster/health` 和 `elastic` 用户完成，启动等待 60s。

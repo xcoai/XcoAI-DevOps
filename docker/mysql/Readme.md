@@ -19,7 +19,7 @@
 ## 初始化与密码
 
 - 首次使用空数据目录启动时，`MYSQL_DATABASE=xcoai_data` 会创建初始库。
-- root 密码来自 `docker/.env` 的 `MYSQL_ROOT_PASSWORD`；compose 中的默认值仅用于本地启动，生产必须覆盖。
+- root 密码由 `MYSQL_ROOT_PASSWORD` 注入，未设置时 compose 拒绝启动；必须在 `docker/.env` 或 secret 中配置。
 - 其他应用需要独立库/用户时，按对应应用 README 初始化，不要复用 root。
 
 ## 健康检查与日志

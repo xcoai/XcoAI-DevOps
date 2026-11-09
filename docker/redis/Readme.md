@@ -10,14 +10,14 @@
 ## 逻辑库分配
 
 - `redis.conf` 设置 `databases 256`，有效编号 `0–255`。
-- `90`：new-api 专用，见 `new-api/Readme.md` 的 `NEWAPI_REDIS_CONN_STRING`。
-- `0–89`、`91–255`：预留；新增应用分配编号后在此登记，避免多个应用使用同一个默认 `/0`。
+- `12`：new-api 专用（new-api 仅接受 `0–15`），见 `new-api/Readme.md` 的 `NEWAPI_REDIS_CONN_STRING`。
+- 其余编号：预留；新增应用分配编号后在此登记，避免多个应用使用同一个默认 `/0`。
 
 ## 启动参数
 
 compose 以 `redis-server /etc/redis.conf --requirepass "$REDIS_PASSWORD" --maxmemory "$REDIS_MAXMEMORY"` 启动，密码和 `maxmemory` 以环境变量为准；`redis.conf` 中的 `maxmemory 512mb` 是直接启动时的默认值。
 
-- `REDIS_PASSWORD`：生产必须在 `docker/.env` 或 secret 中覆盖。
+- `REDIS_PASSWORD`：必填，未设置时 compose 拒绝启动；必须在 `docker/.env` 或 secret 中配置。
 - `REDIS_MAXMEMORY`：默认 `512m`，应低于容器上限 `REDIS_MEM_LIMIT`（默认 `768m`）。
 - `maxmemory-policy=noeviction`：达到上限后拒绝写入；纯缓存场景可改为 `allkeys-lru`，需按业务评估。
 

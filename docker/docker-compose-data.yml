@@ -8,8 +8,8 @@ services:
     ports:
       - "6306:3306"
     environment:
-      # 优先读取 docker/.env 中的 MYSQL_ROOT_PASSWORD；未配置时仅用于本地启动
-      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-XcoAI#888}"
+      # 必填：从 docker/.env 读取，未设置时 compose 拒绝启动
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in docker/.env}"
       MYSQL_DATABASE: xcoai_data
       TZ: Asia/Shanghai
     volumes:
@@ -38,13 +38,13 @@ services:
     ports:
       - "6379:6379"
     environment:
-      # 优先读取 docker/.env 中的 REDIS_PASSWORD；默认值仅用于本地启动
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-XcoAI#888}"
+      # 必填：从 docker/.env 读取，未设置时 compose 拒绝启动
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in docker/.env}"
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/data:/data
-    command: ["redis-server", "/etc/redis.conf", "--requirepass", "${REDIS_PASSWORD:-XcoAI#888}", "--maxmemory", "${REDIS_MAXMEMORY:-512m}"]
+    command: ["redis-server", "/etc/redis.conf", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in docker/.env}", "--maxmemory", "${REDIS_MAXMEMORY:-512m}"]
     healthcheck:
       test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
       interval: 10s
@@ -75,7 +75,7 @@ services:
       TZ: Asia/Shanghai
       # 单节点运行；密码由 docker/.env 的 ELASTIC_PASSWORD 注入
       discovery.type: single-node
-      ELASTIC_PASSWORD: "${ELASTIC_PASSWORD:-XcoAI#888}"
+      ELASTIC_PASSWORD: "${ELASTIC_PASSWORD:?ELASTIC_PASSWORD must be set in docker/.env}"
       xpack.security.enabled: "true"
       # 内网部署，不启用 HTTP/transport TLS；外部访问由防火墙限制
       xpack.security.http.ssl.enabled: "false"

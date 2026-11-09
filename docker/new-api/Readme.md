@@ -21,8 +21,8 @@ NEWAPI_SQL_DSN=user:password@tcp(host.docker.internal:6306)/database?charset=utf
 # 必填：持久化会话密钥，使用 openssl rand -hex 32 生成
 NEWAPI_SESSION_SECRET=<generated-secret>
 
-# 必填：复用 data stack 的 x-redis 的 90 号库；密码需 URL 编码
-NEWAPI_REDIS_CONN_STRING=redis://:<url-encoded-password>@host.docker.internal:6379/90
+# 必填：复用 data stack 的 x-redis 的 12 号库；密码需 URL 编码
+NEWAPI_REDIS_CONN_STRING=redis://:<url-encoded-password>@host.docker.internal:6379/12
 
 # 可选（生产经 Nginx HTTPS 部署时建议启用）：两者需同时设置
 NEWAPI_SESSION_COOKIE_SECURE=true
@@ -31,7 +31,7 @@ NEWAPI_SESSION_COOKIE_TRUSTED_URL=https://router.xcoai.net
 
 - `NEWAPI_SQL_DSN`：指向 `x-mysql` 的宿主机端口 `6306`；Go DSN 凭据部分不要做 URL 编码，`#` 等特殊字符按原样填写，必要时给 `.env` 中的值加单引号。
 - `NEWAPI_SESSION_SECRET`：固定随机值，未设置时 compose 会拒绝启动；用于保持重启后的登录态。
-- `NEWAPI_REDIS_CONN_STRING`：指向 `x-redis` 的宿主机端口 `6379`，路径 `/90` 是 new-api 专用逻辑库；URL 中的密码必须 URL 编码（如 `#` → `%23`、`@` → `%40`、`:` → `%3A`、`/` → `%2F`），未设置时 compose 会拒绝启动。Redis URL 的路径只能是数字库编号，不能写英文名称；`x-redis` 已配置 `databases 256`，`/90` 在其有效范围内。
+- `NEWAPI_REDIS_CONN_STRING`：指向 `x-redis` 的宿主机端口 `6379`，路径 `/12` 是 new-api 专用逻辑库；URL 中的密码必须 URL 编码（如 `#` → `%23`、`@` → `%40`、`:` → `%3A`、`/` → `%2F`），未设置时 compose 会拒绝启动。Redis URL 的路径只能是数字库编号，不能写英文名称；new-api 仅接受 `0–15`，超出会导致启动失败，`12` 在该范围内。
 - `NEWAPI_SESSION_COOKIE_SECURE`：映射为 `SESSION_COOKIE_SECURE`，默认 `false`；经 Nginx HTTPS 部署时设为 `true`，refresh cookie 仅通过 HTTPS 发送。
 - `NEWAPI_SESSION_COOKIE_TRUSTED_URL`：映射为 `SESSION_COOKIE_TRUSTED_URL`，默认空；`SESSION_COOKIE_SECURE=true` 时必填，否则 new-api 启动即退出。值为浏览器实际访问的精确 HTTPS Origin（只写 `scheme://host[:port]`，不支持路径和通配符，多个域名用逗号分隔），必须与 Nginx 站点域名一致。
 - 两个变量必须同时启用：只设 `NEWAPI_SESSION_COOKIE_TRUSTED_URL` 而 `SESSION_COOKIE_SECURE=false` 时，new-api 同样会启动失败（`SESSION_COOKIE_TRUSTED_URL requires SESSION_COOKIE_SECURE=true`）。
@@ -52,7 +52,7 @@ FLUSH PRIVILEGES;
 ## Redis
 
 - 使用 data stack 的 `x-redis`，不额外启动 Redis 容器。
-- 固定使用 `90` 号逻辑库；`x-redis` 的 `databases 256` 为 0–255，`0–89`、`91–255` 预留给其他应用，避免与默认 `/0` 冲突。
+- 固定使用 `12` 号逻辑库；new-api 仅接受 `0–15`，`x-redis` 的 `databases 256` 不影响该限制；其余编号预留给其他应用，避免与默认 `/0` 冲突。
 - Redis 仅用于缓存与共享限流，不承载主数据；主数据备份以 MySQL 为准。
 - 修改 `REDIS_PASSWORD` 后，需要同步更新 `NEWAPI_REDIS_CONN_STRING` 中 URL 编码后的密码。
 
