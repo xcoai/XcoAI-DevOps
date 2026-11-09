@@ -24,7 +24,7 @@ server {
     # }
 
     location = / {
-        return 301 /dashboard;
+        return 301 /dashboard/overview;
     }
 
     location ~ ^/(api|v1beta|v1|kling|jimeng|mj)/ {
