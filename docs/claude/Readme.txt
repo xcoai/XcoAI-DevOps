@@ -5,11 +5,11 @@ Claude目录包含内容：
     比如本目录下commands/skills等目录复制替换对应项目目录：{项目}/.claude/
 
 指令参考：
-/plan               自动拆解需求出实施方案
-/code-review        审查代码质量
-/build-fix          修构建错误
-/security-scan      做安全审计
-/figma-to-html      根据figma设计稿生成html
+/xplan               复杂任务先出计划：涉及文件、改动要点、风险、验证方式，等待确认后再实施
+/xreview             代码审查，按 Blocker / Major / Minor / Nit 分级
+
+技能参考：
+figma-to-html        根据 Figma 设计稿生成 HTML（见下文）
 
 对话参考：
 示例1：根据这个设计稿生成HTML并且存储在项目docs/prd目录：https://www.figma.com/design/xxx/xxx?node-id=xxx&m=dev

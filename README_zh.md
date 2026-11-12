@@ -10,6 +10,7 @@ docker/
 ├── docker-compose-termix.yml   Termix 与 guacd
 ├── docker-compose-ai.yml       new-api
 ├── docker-compose-web.yml      Nginx
+├── .env.example                环境变量模板（复制为 .env 后修改）
 ├── nginx/                      Nginx 入口配置、片段与站点模板
 ├── mysql/                      MySQL 配置与数据
 ├── redis/                      Redis 配置与数据
@@ -31,6 +32,9 @@ docker/
 
 ```bash
 cd docker
+
+# 创建 .env 并按实际环境修改密码/连接串（.env 已 gitignore）
+cp .env.example .env
 
 # 首次启动：复制站点模板，并按实际域名、上游和证书路径修改
 cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
@@ -71,10 +75,11 @@ docker compose -f docker-compose-web.yml up -d
 | `MYSQL_ROOT_PASSWORD` | MySQL root 密码 |
 | `REDIS_PASSWORD` | Redis 密码 |
 | `ELASTIC_PASSWORD` | Elasticsearch `elastic` 用户密码 |
-| `MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`ELASTIC_MEM_LIMIT` | 容器内存上限 |
+| `MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`ELASTIC_MEM_LIMIT` | 数据 stack 容器内存上限 |
+| `TERMIX_MEM_LIMIT`、`GUACD_MEM_LIMIT`、`NEWAPI_MEM_LIMIT`、`NGINX_MEM_LIMIT` | 应用 stack 容器内存上限 |
 | `REDIS_MAXMEMORY` | Redis `maxmemory`，应低于 `REDIS_MEM_LIMIT` |
 | `JAVA_XMS`、`JAVA_XMX` | Elasticsearch JVM 堆，应低于 `ELASTIC_MEM_LIMIT` |
-| `LOG_MAX_SIZE`、`LOG_MAX_FILE` | 容器日志轮转 |
+| `LOG_MAX_SIZE`、`LOG_MAX_FILE` | Docker json-file 容器日志轮转，作用于全部 stack；Nginx 文件日志另由宿主机 logrotate 处理 |
 | `DOCKER_VOLUME_DIRECTORY` | 绑定挂载的基础路径，默认为当前目录 |
 | `TERMIX_DB_DIALECT`、`TERMIX_DB_URL`、`TERMIX_DB_POOL_MAX` | 可选的 Termix MySQL 连接 |
 | `NEWAPI_SQL_DSN` | new-api 的 MySQL 连接（必填，Go DSN，凭据不要 URL 编码） |

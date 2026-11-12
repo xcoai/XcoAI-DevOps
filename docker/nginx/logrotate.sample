@@ -1,0 +1,32 @@
+# ============================================================
+# x-nginx 宿主机日志轮转（模板）
+#
+# 用法：
+#   sudo cp docker/nginx/logrotate.sample /etc/logrotate.d/x-nginx
+#   sudo sed -i 's#<LOG_DIR>#/opt/ai/XcoAI-DevOps/docker/nginx/logs#' /etc/logrotate.d/x-nginx
+#   sudo logrotate -d /etc/logrotate.d/x-nginx      # 语法与匹配预演
+#   sudo logrotate -f /etc/logrotate.d/x-nginx      # 立即执行一次
+#
+# 说明：
+# - access.log / error.log / waf.log 是宿主机 bind mount 文件，不受 Docker
+#   json-file 的 LOG_MAX_SIZE / LOG_MAX_FILE 管理，必须由宿主机 logrotate 处理。
+# - <LOG_DIR> 默认是 <仓库>/docker/nginx/logs；若设置了 DOCKER_VOLUME_DIRECTORY，
+#   日志实际目录是该变量下的 nginx/logs，按部署机实际路径替换。
+# - 模板名带 .sample，复制到 /etc/logrotate.d/ 时去掉 .sample（目标文件名 x-nginx）。
+# - postrotate 让 nginx 重新打开日志文件；容器未运行时不报错。
+# ============================================================
+
+<LOG_DIR>/*.log {
+    daily
+    maxsize 100M
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 root root
+    sharedscripts
+    postrotate
+        docker exec x-nginx nginx -s reopen >/dev/null 2>&1 || true
+    endscript
+}

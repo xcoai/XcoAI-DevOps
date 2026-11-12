@@ -4,7 +4,7 @@
 
 ## 首次准备
 
-1. 创建 `docker/.env`（已 gitignore），覆盖密码等运行参数；变量说明见仓库根目录 README。
+1. 复制 `docker/.env.example` 为 `docker/.env`，按实际环境修改密码、连接串等；变量说明见仓库根目录 README。`.env` 已 gitignore，禁止提交。
 2. 复制 nginx 站点模板，并按实际域名、证书路径和上游修改：
 
    ```bash
@@ -19,6 +19,18 @@
    mkdir -p nginx/site/xcloud nginx/upload nginx/ssl
    # 证书放在 nginx/ssl/<domain>/{fullchain.pem,privkey.pem,chain.pem}
    ```
+
+4. 配置 Nginx 文件日志轮转（`access.log`、`error.log`、`waf.log` 不受 Docker 日志驱动管理）：
+
+   ```bash
+   sudo cp nginx/logrotate.sample /etc/logrotate.d/x-nginx
+   # 将 <LOG_DIR> 换成实际日志目录；默认是 <仓库>/docker/nginx/logs，
+   # 设置 DOCKER_VOLUME_DIRECTORY 时为 <该目录>/nginx/logs
+   sudo sed -i 's#<LOG_DIR>#/opt/ai/XcoAI-DevOps/docker/nginx/logs#' /etc/logrotate.d/x-nginx
+   sudo logrotate -d /etc/logrotate.d/x-nginx
+   ```
+
+   策略为每天或超过 100M 轮转，保留 14 份并压缩；轮转后通过 `docker exec x-nginx nginx -s reopen` 重新打开日志文件。
 
 ## 启动与停止
 

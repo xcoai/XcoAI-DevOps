@@ -25,7 +25,7 @@ Nginx 通过 `host.docker.internal` 访问宿主机上的后端 `:8080`、Termix
 5. `conf_header` → `conf_proxy_header` → `conf_hide_header`
 6. `conf.d/*.conf`：站点 server 块
 
-无 `.conf` 后缀的文件是片段，只能被显式 include；新增片段要同步修改 `nginx.conf` 的 include 列表。`conf_js` 与 `http.js` 默认注释，官方 `nginx:1.31.8` 不带 njs 模块，启用需自定义镜像。
+无 `.conf` 后缀的文件是片段，只能被显式 include；新增片段要同步修改 `nginx.conf` 的 include 列表。`conf_js` 与 `http.js` 作为 njs 存档保留，官方 `nginx:1.31.8` 不带 njs 模块，未来需要时再启用并改用自定义镜像。
 
 ## 站点模板
 
@@ -59,3 +59,19 @@ docker exec x-nginx nginx -s reload
 ```
 
 `conf.d` 为只读挂载，修改配置后无需重启容器，reload 即可生效。`site/`、`upload/`、`ssl/` 由部署机提供，均不入库。
+
+## 日志与轮转
+
+- 访问日志 `/var/log/nginx/access.log`、错误日志 `error.log` 与 WAF 日志 `waf.log` 都写入宿主机 `nginx/logs/`（bind mount）。
+- 这三个文件不受 Docker json-file 的 `LOG_MAX_SIZE` / `LOG_MAX_FILE` 管理，必须在宿主机配置 logrotate，否则会持续增长。
+- 使用仓库模板安装（`<LOG_DIR>` 替换为实际日志目录，默认是 `<仓库>/docker/nginx/logs`；设置 `DOCKER_VOLUME_DIRECTORY` 时为 `<该目录>/nginx/logs`）：
+
+  ```bash
+  sudo cp nginx/logrotate.sample /etc/logrotate.d/x-nginx
+  sudo sed -i 's#<LOG_DIR>#/opt/ai/XcoAI-DevOps/docker/nginx/logs#' /etc/logrotate.d/x-nginx
+  sudo logrotate -d /etc/logrotate.d/x-nginx    # 预演，确认匹配文件
+  sudo logrotate -f /etc/logrotate.d/x-nginx    # 立即轮转一次
+  ```
+
+- 模板策略：每天或单文件超过 100M 时轮转，保留 14 份并压缩；`postrotate` 执行 `docker exec x-nginx nginx -s reopen`，让容器内进程重新打开新文件。
+- 容器 stdout/stderr（启动信息、Docker 自身错误）仍由 compose 的 json-file 轮转配置管理。

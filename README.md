@@ -10,6 +10,7 @@ docker/
 ├── docker-compose-termix.yml   Termix and guacd
 ├── docker-compose-ai.yml       new-api
 ├── docker-compose-web.yml      Nginx
+├── .env.example                Environment variable template (copy to .env)
 ├── nginx/                      Nginx entry config, fragments, and site templates
 ├── mysql/                      MySQL config and data
 ├── redis/                      Redis config and data
@@ -31,6 +32,9 @@ The component directories listed above contain their own README with configurati
 
 ```bash
 cd docker
+
+# Create .env and edit passwords/connection strings for your environment (.env is gitignored)
+cp .env.example .env
 
 # First run: create site configs and edit domains, upstreams, and certificate paths
 cp nginx/conf.d/default.conf.sample nginx/conf.d/default.conf
@@ -71,10 +75,11 @@ Runtime configuration belongs in `docker/.env`, which is gitignored. Do not comm
 | `MYSQL_ROOT_PASSWORD` | MySQL root password |
 | `REDIS_PASSWORD` | Redis password |
 | `ELASTIC_PASSWORD` | Elasticsearch `elastic` password |
-| `MYSQL_MEM_LIMIT`, `REDIS_MEM_LIMIT`, `ELASTIC_MEM_LIMIT` | Container memory limits |
+| `MYSQL_MEM_LIMIT`, `REDIS_MEM_LIMIT`, `ELASTIC_MEM_LIMIT` | Data stack container memory limits |
+| `TERMIX_MEM_LIMIT`, `GUACD_MEM_LIMIT`, `NEWAPI_MEM_LIMIT`, `NGINX_MEM_LIMIT` | Application stack container memory limits |
 | `REDIS_MAXMEMORY` | Redis `maxmemory`; keep it below `REDIS_MEM_LIMIT` |
 | `JAVA_XMS`, `JAVA_XMX` | Elasticsearch JVM heap; keep it below `ELASTIC_MEM_LIMIT` |
-| `LOG_MAX_SIZE`, `LOG_MAX_FILE` | Container log rotation |
+| `LOG_MAX_SIZE`, `LOG_MAX_FILE` | Docker json-file log rotation for all stacks; Nginx file logs use host logrotate instead |
 | `DOCKER_VOLUME_DIRECTORY` | Base path for bind mounts; defaults to the current directory |
 | `TERMIX_DB_DIALECT`, `TERMIX_DB_URL`, `TERMIX_DB_POOL_MAX` | Optional Termix MySQL connection |
 | `NEWAPI_SQL_DSN` | Required new-api MySQL connection (Go DSN; credentials are not URL-encoded) |

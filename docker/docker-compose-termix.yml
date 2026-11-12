@@ -4,6 +4,8 @@ services:
     # https://docs.termix.site/install/server/docker
     image: termixssh/termix:26.10.6
     restart: unless-stopped
+    # Node 进程上限，可按宿主机内存和实际负载覆盖
+    mem_limit: "${TERMIX_MEM_LIMIT:-512m}"
     ports:
       - "9980:8080"
     volumes:
@@ -20,6 +22,11 @@ services:
       DATABASE_POOL_MAX: "${TERMIX_DB_POOL_MAX:-}"
     depends_on:
       - x-guacd
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-termix
 
@@ -27,8 +34,15 @@ services:
     container_name: x-guacd
     image: guacamole/guacd:1.6.0
     restart: unless-stopped
+    # guacd 为轻量 C 守护进程，主要开销在 RDP/VNC 会话
+    mem_limit: "${GUACD_MEM_LIMIT:-256m}"
     ports:
       - "9922:4822"
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-termix
 

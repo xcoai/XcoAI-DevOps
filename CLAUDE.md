@@ -41,6 +41,7 @@ docker compose -f docker-compose-ai.yml config
 docker compose -f docker-compose-web.yml config
 docker exec x-nginx nginx -t                         # 改 nginx 配置后先测语法
 docker exec x-nginx nginx -s reload                  # 配置为只读挂载，刷新配置无需重启
+logrotate -d /etc/logrotate.d/x-nginx                # 宿主机 Nginx 文件日志轮转预演（需先按实际路径替换模板）
 docker exec x-redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'  # PONG
 docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日志（另有 waf.log）
 ```
@@ -77,7 +78,8 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - WAF 分两段：`waf_maps` 只打标，`waf_server` 在 server 级执行拦截（命中→403、非法方法→405）并把规则命中、非法方法、恶意 Referer 写入 `waf.log`；日志含 `$host`、`$status` 与各规则分项。`$waf_action` 的 `"block"` 改成 `"pass"` 即整站切观察模式；`waf_exempt` 仅豁免 `$query_string` 上的 SQLi/XSS，UA/路径规则仍生效。SQLi/XSS 只匹配未解码的 `$query_string`，路径规则使用 `$uri`（已解码/规范化）。WAF 只覆盖常见特征，不追求规则全覆盖；十六进制编码等未识别形式由应用层参数化查询兜底（文件头注释已说明，改规则前先读）。管理类站点（termix）改用 `waf_server_lite`：仅拦截 UA/Referer/非法方法，URI/SQLi/XSS 规则只记录不拦截，避免文件路径参数（`/etc/passwd`、`../`）被误伤。
 - 限流：location 内的 `limit_req` 会**替换**而非叠加 server 级的 zone，只能按路径分档（`req_site` / `req_api` / `req_auth`）。
 - 静态内容：`site/`（如 `site/xcloud` 为站点根）、`upload/`（下载类后缀强制 `Content-Disposition: attachment`，其余长缓存）、证书按域名放 `ssl/<domain>/`。这三个目录不入库，由部署机提供。
-- `conf_js` + `http.js`（njs）在 `nginx.conf` 中被注释：官方 `nginx:1.31.8` 不带 njs 模块，启用需自定义镜像。
+- 日志：`access.log` / `error.log` / `waf.log` 写入宿主机 `nginx/logs/`，不受 Docker json-file 的 `LOG_MAX_SIZE` / `LOG_MAX_FILE` 管理；使用 `nginx/logrotate.sample` 在宿主机配置 logrotate，轮转后由 `docker exec x-nginx nginx -s reopen` 重新打开文件。
+- `conf_js` + `http.js`（njs）在 `nginx.conf` 中被注释，作为存档保留；官方 `nginx:1.31.8` 不带 njs 模块，未来需要时再启用并改用自定义镜像。
 
 ### 数据层
 
@@ -103,7 +105,7 @@ docker ps && docker logs --tail=100 x-nginx          # 健康状态 / 错误日�
 - 卷路径统一 `${DOCKER_VOLUME_DIRECTORY:-.}/<组件>/<子目录>`，配置与数据目录同名放在组件子目录下。
 - `.gitignore` 忽略 `.DS_Store`、`data/`、`logs/`、`bak/`、`ssl/`、`site/`、`upload/`、`.workbuddy/`、`docker/.env`、`docker/nginx/conf.d/conf_custom_header`；注意别把私钥或大文件提交进去。
 - 配置注释按现有风格用中文，踩坑说明写在文件头（`conf_limit`、`waf_maps` 是范例），改规则时同步更新。
-- 数据服务统一使用 `restart: unless-stopped`，并配置 `mem_limit` 与 json-file 日志轮转；内存和日志参数可通过 `docker/.env` 覆盖（`MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`REDIS_MAXMEMORY`、`ELASTIC_MEM_LIMIT`、`JAVA_XMS`、`JAVA_XMX`、`LOG_MAX_SIZE`、`LOG_MAX_FILE`），未设置时使用 Compose 默认值。`JAVA_XMS`/`JAVA_XMX` 当前用于 x-es，堆应低于 `ELASTIC_MEM_LIMIT`；`REDIS_MAXMEMORY` 应低于 `REDIS_MEM_LIMIT`。ES 健康检查通过本地 HTTP 和 `elastic` 用户认证。Termix 可选 MySQL 配置通过 `TERMIX_DB_DIALECT`、`TERMIX_DB_URL`、`TERMIX_DB_POOL_MAX` 注入，留空时使用 SQLite。
+- 所有容器统一使用 `restart: unless-stopped`，并配置 `mem_limit` 与 json-file 日志轮转；内存和日志参数可通过 `docker/.env` 覆盖（数据 stack：`MYSQL_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`REDIS_MAXMEMORY`、`ELASTIC_MEM_LIMIT`、`JAVA_XMS`、`JAVA_XMX`；应用 stack：`TERMIX_MEM_LIMIT`、`GUACD_MEM_LIMIT`、`NEWAPI_MEM_LIMIT`、`NGINX_MEM_LIMIT`；日志统一 `LOG_MAX_SIZE`、`LOG_MAX_FILE`），未设置时使用各 compose 的默认值。`JAVA_XMS`/`JAVA_XMX` 当前用于 x-es，堆应低于 `ELASTIC_MEM_LIMIT`；`REDIS_MAXMEMORY` 应低于 `REDIS_MEM_LIMIT`。ES 健康检查通过本地 HTTP 和 `elastic` 用户认证。Termix 可选 MySQL 配置通过 `TERMIX_DB_DIALECT`、`TERMIX_DB_URL`、`TERMIX_DB_POOL_MAX` 注入，留空时使用 SQLite。Nginx 的 `access.log`/`error.log`/`waf.log` 为宿主机挂载文件，需另行配置宿主机 logrotate（见 `docker/nginx/logrotate.sample`）。
 
 ## 项目级声明（对应全局 CLAUDE.md 第 7 节）
 

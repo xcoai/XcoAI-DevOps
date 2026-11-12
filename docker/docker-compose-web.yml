@@ -3,6 +3,8 @@ services:
     container_name: x-nginx
     image: nginx:1.31.8
     restart: unless-stopped
+    # 反向代理上限，可按并发量和宿主机内存覆盖
+    mem_limit: "${NGINX_MEM_LIMIT:-256m}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -15,6 +17,11 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/site:/usr/share/nginx/site:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/upload:/usr/share/nginx/upload:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/logs:/var/log/nginx
+    logging:
+      driver: json-file
+      options:
+        max-size: "${LOG_MAX_SIZE:-50m}"
+        max-file: "${LOG_MAX_FILE:-3}"
     networks:
       - net-web
 
